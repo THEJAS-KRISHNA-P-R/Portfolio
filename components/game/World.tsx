@@ -1,0 +1,263 @@
+"use client";
+
+import React, { Suspense } from "react";
+import * as THREE from "three";
+import { Canvas } from "@react-three/fiber";
+import { AdaptiveEvents, PerformanceMonitor, KeyboardControls, Environment, Stars, Instances, Instance } from "@react-three/drei";
+import { Physics, RigidBody, CuboidCollider } from "@react-three/rapier";
+import { Car } from "./Car";
+import { Football } from "./Football";
+import { GoalPost } from "./GoalPost";
+import { GoalCelebration } from "./GoalCelebration";
+import { ZONES_ARRAY } from "@/lib/constants";
+import { TriggerZone } from "./TriggerZone";
+import { SpinningText, Aurora } from "../ui";
+
+// Key mappings
+const keyboardMap = [
+    { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
+    { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
+    { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
+    { name: 'right', keys: ['ArrowRight', 'KeyD'] },
+    { name: 'boost', keys: ['Space'] },
+    { name: 'reset', keys: ['KeyR', 'r'] },
+];
+
+const ARENA_SIZE = 120;
+
+function WorldFallback() {
+    return (
+        <div className="absolute inset-0 bg-[#0a0a0f] flex items-center justify-center z-50">
+            <Aurora />
+            <div className="relative z-10 flex flex-col items-center">
+                <div className="text-4xl mb-6">|||</div>
+                <SpinningText text="LOADING WORLD..." radius={5} className="text-white font-mono text-sm tracking-widest" />
+            </div>
+        </div>
+    );
+}
+
+
+function WorldEnvironment() {
+    // Tree clusters — scattered naturally around edges
+    const TREE_POSITIONS: [number, number, number][] = [
+        [15, 0, 20], [18, 0, 22], [14, 0, 25],      // cluster near start
+        [-20, 0, 30], [-24, 0, 28], [-18, 0, 33],
+        [35, 0, -15], [38, 0, -18], [33, 0, -12],
+        [-30, 0, -25], [-35, 0, -22],
+        [55, 0, 40], [58, 0, 38], [52, 0, 44],
+        [-50, 0, -50], [-55, 0, -48],
+        [70, 0, -30], [65, 0, -35],
+        [-60, 0, 60], [-64, 0, 56],
+        [80, 0, 50], [-80, 0, -40], [40, 0, 80], [-40, 0, 80],
+        [90, 0, -60], [-90, 0, 60],
+    ]
+
+    // Rocks — scattered between trees
+    const ROCK_POSITIONS: [number, number, number][] = [
+        [22, 0, 15], [-15, 0, -20], [40, 0, 10],
+        [-35, 0, 45], [60, 0, -20], [-55, 0, 30],
+        [10, 0, 50], [-10, 0, -55], [75, 0, 20],
+    ]
+
+    // Lamp posts — along the roads
+    const LAMP_POSITIONS: [number, number, number][] = [
+        [4, 0, 20], [-4, 0, 20],
+        [4, 0, -20], [-4, 0, -20],
+        [4, 0, 60], [-4, 0, 60],
+        [4, 0, -60], [-4, 0, -60],
+        [20, 0, 4], [20, 0, -4],
+        [-20, 0, 4], [-20, 0, -4],
+        [60, 0, 4], [60, 0, -4],
+        [-60, 0, 4], [-60, 0, -4],
+    ]
+
+    return (
+        <>
+            {/* Physics ground */}
+            <RigidBody type="fixed" friction={0.8} restitution={0.1}>
+                <CuboidCollider args={[200, 0.1, 200]} position={[0, -0.1, 0]} />
+            </RigidBody>
+
+            {/* Main ground plane — solid color, no grid */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+                <planeGeometry args={[400, 400]} />
+                <meshStandardMaterial color="#0a1a12" roughness={0.95} metalness={0.0} />
+            </mesh>
+
+            {/* Road markings */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
+                <planeGeometry args={[6, 300]} />
+                <meshStandardMaterial color="#0d2218" roughness={1} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
+                <planeGeometry args={[300, 6]} />
+                <meshStandardMaterial color="#0d2218" roughness={1} />
+            </mesh>
+
+            {/* Ground variation patches */}
+            {[
+                [30, 0, 25], [-40, 0, -30], [60, 0, -50],
+                [-70, 0, 45], [20, 0, -80], [-50, 0, 70],
+                [90, 0, 10], [-20, 0, 90],
+            ].map(([x, y, z], i) => (
+                <mesh key={i} rotation={[-Math.PI / 2, 0, Math.random()]} position={[x, 0.002, z]}>
+                    <circleGeometry args={[4 + Math.random() * 5, 8]} />
+                    <meshStandardMaterial color="#071510" roughness={1} transparent opacity={0.6} />
+                </mesh>
+            ))}
+
+            {/* INSTANCED TREES */}
+            <Instances castShadow limit={50}>
+                <cylinderGeometry args={[0.12, 0.18, 1.2, 6]} />
+                <meshStandardMaterial color="#1a3d20" roughness={1} />
+                {TREE_POSITIONS.map((pos, i) => <Instance key={`trunk-${i}`} position={[pos[0], pos[1] + 0.6, pos[2]]} />)}
+            </Instances>
+            <Instances castShadow limit={50}>
+                <coneGeometry args={[0.9, 2.2, 6]} />
+                <meshStandardMaterial color="#0d4a1f" roughness={1} />
+                {TREE_POSITIONS.map((pos, i) => <Instance key={`foliage1-${i}`} position={[pos[0], pos[1] + 2.0, pos[2]]} />)}
+            </Instances>
+            <Instances castShadow limit={50}>
+                <coneGeometry args={[0.6, 1.6, 6]} />
+                <meshStandardMaterial color="#0f5a24" roughness={1} />
+                {TREE_POSITIONS.map((pos, i) => <Instance key={`foliage2-${i}`} position={[pos[0], pos[1] + 2.9, pos[2]]} />)}
+            </Instances>
+
+            {/* INSTANCED ROCKS */}
+            <Instances castShadow limit={50}>
+                <dodecahedronGeometry args={[0.6, 0]} />
+                <meshStandardMaterial color="#1a2a20" roughness={0.9} metalness={0.1} />
+                {ROCK_POSITIONS.map((pos, i) => {
+                    const pseudoScale = 0.8 + Math.abs(Math.sin(i)) * 0.6;
+                    return <Instance key={`rock-${i}`} position={pos} scale={pseudoScale} />
+                })}
+            </Instances>
+
+            {/* INSTANCED LAMP POSTS */}
+            <Instances castShadow limit={50}>
+                <cylinderGeometry args={[0.05, 0.07, 3.5, 6]} />
+                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
+                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp1-${i}`} position={pos} />)}
+            </Instances>
+            <Instances limit={50}>
+                <boxGeometry args={[0.1, 0.1, 0.6]} />
+                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
+                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp2-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.3]} />)}
+            </Instances>
+            <Instances limit={50}>
+                <sphereGeometry args={[0.12, 8, 8]} />
+                <meshBasicMaterial color="#aaffcc" />
+                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp3-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} />)}
+            </Instances>
+
+            {/* LAMP POST LIGHTS */}
+            {LAMP_POSITIONS.map((pos, i) => (
+                <pointLight key={`light-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} color="#aaffcc" intensity={1.5} distance={12} decay={2} />
+            ))}
+
+            {/* Boundary walls — invisible physics, visible as low hedges */}
+            {[
+                { pos: [0, 0.3, 150] as [number, number, number], rot: [0, 0, 0] },
+                { pos: [0, 0.3, -150] as [number, number, number], rot: [0, 0, 0] },
+                { pos: [150, 0.3, 0] as [number, number, number], rot: [0, Math.PI / 2, 0] },
+                { pos: [-150, 0.3, 0] as [number, number, number], rot: [0, Math.PI / 2, 0] },
+            ].map(({ pos, rot }, i) => (
+                <group key={`wall${i}`} position={pos} rotation={rot as any}>
+                    {/* Visible hedge row */}
+                    <mesh>
+                        <boxGeometry args={[300, 1.5, 0.8]} />
+                        <meshStandardMaterial color="#0a2a12" roughness={1} />
+                    </mesh>
+                </group>
+            ))}
+
+            {/* Boundary physics colliders */}
+            <RigidBody type="fixed" friction={0.3}>
+                <CuboidCollider args={[150, 2, 0.4]} position={[0, 1, 150]} />
+                <CuboidCollider args={[150, 2, 0.4]} position={[0, 1, -150]} />
+                <CuboidCollider args={[0.4, 2, 150]} position={[150, 1, 0]} />
+                <CuboidCollider args={[0.4, 2, 150]} position={[-150, 1, 0]} />
+            </RigidBody>
+
+            {/* Small ramp */}
+            <RigidBody type="fixed">
+                <mesh position={[25, 0.3, 0]} rotation={[0, 0, -0.18]} castShadow receiveShadow>
+                    <boxGeometry args={[8, 0.6, 4]} />
+                    <meshStandardMaterial color="#0d2a18" roughness={0.9} />
+                </mesh>
+            </RigidBody>
+
+            {/* Second ramp */}
+            <RigidBody type="fixed">
+                <mesh position={[-25, 0.3, 0]} rotation={[0, 0, 0.18]} castShadow receiveShadow>
+                    <boxGeometry args={[8, 0.6, 4]} />
+                    <meshStandardMaterial color="#0d2a18" roughness={0.9} />
+                </mesh>
+            </RigidBody>
+        </>
+    )
+}
+
+export function World() {
+    return (
+        <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none' }}>
+            <Suspense fallback={<WorldFallback />}>
+                <KeyboardControls map={keyboardMap}>
+                    <Canvas
+                        style={{ touchAction: 'none' }}
+                        camera={{ position: [0, 8, 12], fov: 50 }}
+                        shadows
+                        gl={{ shadowMapType: THREE.PCFSoftShadowMap, antialias: true, powerPreference: 'high-performance' } as any}
+                        dpr={[1, 1.5]}
+                    >
+                        {/* Performance */}
+                        <AdaptiveEvents />
+                        <PerformanceMonitor />
+
+                        {/* Scene */}
+                        <ambientLight intensity={0.6} />
+                        <directionalLight
+                            position={[10, 20, 10]}
+                            intensity={1.2}
+                            castShadow
+                            shadow-mapSize={[2048, 2048]}
+                            shadow-camera-left={-60}
+                            shadow-camera-right={60}
+                            shadow-camera-top={60}
+                            shadow-camera-bottom={-60}
+                        />
+                        <Environment preset="sunset" />
+                        <Stars radius={80} depth={50} count={3000} factor={4} fade />
+                        <fog attach="fog" args={['#0a0a0f', 55, 130]} />
+
+                        {/* Physics */}
+                        <Physics gravity={[0, -15, 0]} debug={false}>
+                            {/* Ground first — synchronous */}
+                            <WorldEnvironment />
+
+                            {/* Car — synchronous (procedural mesh, no GLB) */}
+                            <Car />
+
+                            {/* Football */}
+                            <Football />
+                            <GoalPost />
+                            <GoalCelebration />
+
+                            {/* Trigger Zones */}
+                            {ZONES_ARRAY.map(zone => (
+                                <TriggerZone
+                                    key={zone.id}
+                                    position={zone.position}
+                                    zoneId={zone.id}
+                                    color={zone.color}
+                                    label={zone.label}
+                                />
+                            ))}
+                        </Physics>
+                    </Canvas>
+                </KeyboardControls>
+            </Suspense>
+        </div>
+    );
+}

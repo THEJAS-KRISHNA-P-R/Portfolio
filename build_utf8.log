@@ -1,0 +1,139 @@
+﻿
+> temp-app@0.1.0 build
+> next build
+
+Ôû▓ Next.js 16.1.6 (Turbopack)
+
+  Creating an optimized production build ...
+node.exe : 
+At C:\Program Files\nod
+ejs\npm.ps1:29 char:3
++   & $NODE_EXE 
+$NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (:String) [],    
+ RemoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+> Build error occurred
+Error: Turbopack build 
+failed with 1 errors:
+./app/globals.css
+Error evaluating 
+Node.js code
+CssSyntaxError: C:\User
+s\USER\Desktop\Portfoli
+o\app\globals.css:261:1
+: Unexpected }
+    at Input.error (nod
+e_modules/postcss/lib/i
+nput.js:135:16) [C:\Use
+rs\USER\Desktop\Portfol
+io\.next\build\chunks\n
+ode_modules_fe693df6._.
+js:4651:22]
+    at 
+Parser.unexpectedClose 
+(node_modules/postcss/l
+ib/parser.js:587:22) [C
+:\Users\USER\Desktop\Po
+rtfolio\.next\build\chu
+nks\node_modules_fe693d
+f6._.js:5820:26]
+    at Parser.end (node
+_modules/postcss/lib/pa
+rser.js:330:12) [C:\Use
+rs\USER\Desktop\Portfol
+io\.next\build\chunks\n
+ode_modules_fe693df6._.
+js:5593:18]
+    at Parser.parse (no
+de_modules/postcss/lib/
+parser.js:456:16) [C:\U
+sers\USER\Desktop\Portf
+olio\.next\build\chunks
+\node_modules_fe693df6.
+_.js:5704:26]
+    at parse (node_modu
+les/postcss/lib/parse.j
+s:11:12) [C:\Users\USER
+\Desktop\Portfolio\.nex
+t\build\chunks\node_mod
+ules_fe693df6._.js:5853
+:16]
+    at new LazyResult (
+node_modules/postcss/li
+b/lazy-result.js:165:16
+) [C:\Users\USER\Deskto
+p\Portfolio\.next\build
+\chunks\node_modules_fe
+693df6._.js:6105:24]
+    at 
+Processor.process (node
+_modules/postcss/lib/pr
+ocessor.js:53:14) [C:\U
+sers\USER\Desktop\Portf
+olio\.next\build\chunks
+\node_modules_fe693df6.
+_.js:6572:20]
+    at transform (turbo
+pack:///[turbopack-node
+]/transforms/postcss.ts
+:70:51) [C:\Users\USER\
+Desktop\Portfolio\.next
+\build\chunks\[root-of-
+the-server]__51225daf._
+.js:146:52]
+    at run (turbopack:/
+//[turbopack-node]/ipc/
+evaluate.ts:92:29) [C:\
+Users\USER\Desktop\Port
+folio\.next\build\chunk
+s\[root-of-the-server]_
+_974941ed._.js:443:37]
+    at run (turbopack:/
+//[turbopack-node]/ipc/
+evaluate.ts:115:11) [C:
+\Users\USER\Desktop\Por
+tfolio\.next\build\chun
+ks\[root-of-the-server]
+__974941ed._.js:464:25]
+
+Import trace:
+  Client Component 
+Browser:
+    ./app/globals.css 
+[Client Component 
+Browser]
+    ./app/layout.tsx 
+[Server Component]
+
+
+    at transform (turbo
+pack:///[turbopack-node
+]/transforms/postcss.ts
+:70:51) [C:\Users\USER\
+Desktop\Portfolio\.next
+\build\chunks\[root-of-
+the-server]__51225daf._
+.js:146:52])
+    at run (turbopack:/
+//[turbopack-node]/ipc/
+evaluate.ts:92:29) [C:\
+Users\USER\Desktop\Port
+folio\.next\build\chunk
+s\[root-of-the-server]_
+_974941ed._.js:443:37])
+    at run (turbopack:/
+//[turbopack-node]/ipc/
+evaluate.ts:115:11) [C:
+\Users\USER\Desktop\Por
+tfolio\.next\build\chun
+ks\[root-of-the-server]
+__974941ed._.js:464:25]
+)

@@ -1,0 +1,404 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ShinyButton @property declarations */
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@property --gradient-angle-offset {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@property --gradient-percent {
+  syntax: "<percentage>";
+  initial-value: 5%;
+  inherits: false;
+}
+
+@property --gradient-shine {
+  syntax: "<color>";
+  initial-value: white;
+  inherits: false;
+}
+
+/* Marquee scrolling animation */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Pulse glow for THEJAS card */
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 0, 0, 0;
+}
+
+html,
+body {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom Scrollbar for Non-Game Mode & Modals */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ── Pink Hover Rules (Portfolio-wide) ──────────────────────────── */
+
+/* Button underside pink glow on hover */
+.pink-underside {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-underside:hover {
+  box-shadow: 0 4px 0 0 #ff4d7d, 0 6px 20px -4px rgba(255, 77, 125, 0.3);
+}
+
+/* Card bottom-left pink accent line on hover */
+.pink-accent-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.pink-accent-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: #ff4d7d;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-accent-line:hover::after {
+  width: 40%;
+}
+
+/* Nav link pink underline slide from left */
+.pink-nav-link {
+  position: relative;
+  transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0;
+  height: 1.5px;
+  background: #ff4d7d;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-nav-link:hover {
+  color: #ff4d7d !important;
+}
+
+.pink-nav-link:hover::after {
+  width: 100%;
+}
+
+/* Skill badge pink border on hover */
+.pink-badge-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-badge-hover:hover {
+  border-color: #ff4d7d !important;
+  color: #ff4d7d !important;
+}
+
+/* Contact/stat card pink accent */
+.pink-card-hover {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-card-hover::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: #ff4d7d;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pink-card-hover:hover {
+  border-color: rgba(255, 77, 125, 0.3) !important;
+}
+
+.pink-card-hover:hover::after {
+  width: 40%;
+}
+
+/* Turbo bar pulse when charged */
+@keyframes turbo-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(0, 230, 118, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(0, 230, 118, 0.8);
+  }
+}
+
+/* Zone confirm modal border spin */
+@keyframes border-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scorePopIn {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── HUD Portfolio Button (uiverse FColombati adapted) ── */
+/* The root button element should have NO visible border/background itself */
+.hud-portfolio-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  /* CRITICAL: prevent overflow from creating ghost: */
+  overflow: hidden;
+  border-radius: 100em;
+}
+
+
+/* .btn-outer should NOT have its own box-shadow on mobile */
+.hud-portfolio-btn .btn-outer {
+  border-radius: 100em;
+  /* Remove any padding or margin that pushes it wider than btn-inner */
+  padding: 0;
+}
+
+/* .btn-inner is the only thing that should be visible */
+.hud-portfolio-btn .btn-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 1.1rem;
+  border-radius: 100em;
+  background: rgba(5, 10, 15, 0.85);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(0, 230, 118, 0.15),
+    0 0 12px rgba(0, 230, 118, 0.08);
+  white-space: nowrap;
+}
+
+/* Remove the ::after glow that bleeds outside */
+.hud-portfolio-btn::after {
+  display: none;
+}
+
+.hud-portfolio-btn .btn-inner {
+  position: relative;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 0.75em 1.5em;
+  background-image: linear-gradient(135deg, rgba(15, 35, 22, 1), rgba(8, 20, 14, 1));
+  transition: box-shadow 300ms ease, clip-path 250ms ease, transform 250ms ease;
+  will-change: box-shadow, clip-path, transform;
+  overflow: clip;
+  clip-path: inset(0 0 0 0 round 100em);
+  box-shadow:
+    0 0 0 0 inset rgba(0, 0, 0, 0.1),
+    -0.05em -0.05em 0.05em 0 inset rgba(0, 0, 0, 0.3),
+    0 0 0 0 inset rgba(0, 0, 0, 0.1),
+    0 0 0.05em 0.2em inset rgba(0, 230, 118, 0.06),
+    0.025em 0.05em 0.1em 0 inset rgba(0, 230, 118, 0.2),
+    0.12em 0.12em 0.12em inset rgba(0, 230, 118, 0.08),
+    -0.075em -0.25em 0.25em 0.1em inset rgba(0, 0, 0, 0.4);
+}
+
+.hud-portfolio-btn:hover .btn-inner {
+  clip-path: inset(clamp(1px, 0.0625em, 2px) clamp(1px, 0.0625em, 2px) clamp(1px, 0.0625em, 2px) clamp(1px, 0.0625em, 2px) round 100em);
+  box-shadow:
+    0.1em 0.15em 0.05em 0 inset rgba(0, 0, 0, 0.9),
+    -0.025em -0.03em 0.05em 0.025em inset rgba(0, 0, 0, 0.6),
+    0.25em 0.25em 0.2em 0 inset rgba(0, 0, 0, 0.6),
+    0 0 0.05em 0.5em inset rgba(0, 230, 118, 0.04),
+    0 0 0 0 inset rgba(0, 230, 118, 0.2),
+    0.12em 0.12em 0.12em inset rgba(0, 230, 118, 0.06),
+    -0.075em -0.12em 0.2em 0.1em inset rgba(0, 0, 0, 0.4);
+}
+
+.hud-portfolio-btn:active .btn-inner {
+  transform: scale(0.975);
+}
+
+.hud-portfolio-btn .btn-inner span {
+  position: relative;
+  z-index: 4;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0);
+  background-image: linear-gradient(135deg, #00e676, #69f0ae);
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: transform 250ms ease;
+  display: block;
+  will-change: transform;
+  text-shadow: rgba(0, 230, 118, 0.15) 0 0 0.3em;
+  -webkit-user-select: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.hud-portfolio-btn:hover .btn-inner span {
+  transform: scale(0.975);
+}
+
+@keyframes btnShimmer {
+  0% {
+    background-position: 200% center;
+  }
+
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes rotatePulse {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  35% {
+    transform: rotate(-90deg) scale(1.08);
+  }
+
+  65% {
+    transform: rotate(-90deg) scale(1.08);
+  }
+
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+/* Landscape mobile: tighten all HUD elements */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+
+  /* Title box: smaller, stays top-left */
+  .hud-title-box {
+    padding: 0.4rem 0.7rem !important;
+  }
+
+  .hud-title-box h2 {
+    font-size: 0.7rem !important;
+  }
+
+  .hud-title-box p {
+    display: none !important;
+    /* hide subtitle in landscape */
+  }
+
+  /* Turbo bar: keep it tiny */
+  .hud-turbo-label {
+    font-size: 0.5rem !important;
+  }
+
+  .hud-turbo-bar {
+    width: 90px !important;
+    height: 2px !important;
+  }
+
+  /* Speed: smaller numerals */
+  .hud-speed-value {
+    font-size: 1.1rem !important;
+  }
+
+  /* Controls panel: completely hidden in landscape (user knows by now) */
+  .hud-controls-panel {
+    display: none !important;
+  }
+
+  /* Standard Portfolio button: slightly smaller */
+  .hud-portfolio-btn .btn-inner {
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.62rem !important;
+  }
+}
+
+/* iOS Safari address bar trick */
+body.game-mode {
+  min-height: calc(100vh + 1px);
+}
