@@ -10,10 +10,34 @@ export default function HUD() {
     const turboCharge = usePortfolioStore(s => s.turboCharge)
     const [showControls, setShowControls] = useState(true)
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const [wallHits, setWallHits] = useState<number | null>(null)
+    const [mazeMode, setMazeMode] = useState<'reset' | 'counter' | null>(null)
+    const [bestHits, setBestHits] = useState<number>(Infinity)
 
     useEffect(() => {
-        const timer = setTimeout(() => setShowControls(false), 4000)
-        return () => clearTimeout(timer)
+        const onHitUpdate = (e: any) => {
+            setWallHits(e.detail.count)
+            setBestHits(e.detail.bestHits)
+            setMazeMode('counter')
+        }
+        const onModeChange = (e: any) => {
+            setMazeMode(e.detail.mode)
+            setBestHits(e.detail.bestHits)
+            setWallHits(e.detail.mode === 'counter' ? 0 : null)
+        }
+        const onMazeClear = () => {
+            setMazeMode(null)
+            setWallHits(null)
+        }
+
+        window.addEventListener('maze-hit-update', onHitUpdate)
+        window.addEventListener('maze-mode-change', onModeChange)
+        window.addEventListener('maze-clear', onMazeClear)
+        return () => {
+            window.removeEventListener('maze-hit-update', onHitUpdate)
+            window.removeEventListener('maze-mode-change', onModeChange)
+            window.removeEventListener('maze-clear', onMazeClear)
+        }
     }, [])
 
     useEffect(() => {
@@ -46,7 +70,23 @@ export default function HUD() {
                 fontFamily: "'JetBrains Mono', monospace",
             }}
         >
-
+            <style>{`
+                @media (max-width: 600px) {
+                    .hud-title-box { padding: 0.4rem 0.8rem !important; }
+                    .hud-title-box h2 { font-size: 11px !important; }
+                    .hud-title-box p { font-size: 9px !important; }
+                    .hud-turbo-bar { width: 80px !important; }
+                    .hud-controls-panel { display: none !important; }
+                    .hud-speed-value { font-size: 1.1rem !important; }
+                    .hud-portfolio-btn { transform: scale(0.85); transform-origin: bottom right; }
+                    .hud-turbo-label { font-size: 0.5rem !important; }
+                }
+                @media (max-height: 450px) and (orientation: landscape) {
+                    .hud-controls-panel { display: none !important; }
+                    .hud-title-box { padding: 0.3rem 0.6rem !important; }
+                    .hud-portfolio-btn { transform: scale(0.8); transform-origin: bottom right; }
+                }
+            `}</style>
             {/* ── TOP LEFT: Title ── */}
             <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10 }}>
                 <div className="hud-title-box" style={{
@@ -65,6 +105,61 @@ export default function HUD() {
                     </p>
                 </div>
             </div>
+
+            {/* ── Maze Counter Pill ── */}
+            {mazeMode === 'counter' && wallHits !== null && (
+                <div style={{
+                    position: 'absolute',
+                    top: '1rem',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 30,
+                    pointerEvents: 'none',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.15rem',
+                }}>
+                    <div style={{
+                        background: 'rgba(0,10,26,0.85)',
+                        border: '1px solid rgba(0,150,255,0.35)',
+                        borderRadius: '12px',
+                        padding: '0.4rem 1.1rem',
+                        backdropFilter: 'blur(10px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                    }}>
+                        <span style={{
+                            fontSize: '0.5rem',
+                            color: 'rgba(77,166,255,0.55)',
+                            letterSpacing: '0.16em',
+                            textTransform: 'uppercase',
+                        }}>
+                            WALL HITS
+                        </span>
+                        <span style={{
+                            fontSize: '1.6rem',
+                            fontWeight: 800,
+                            color: wallHits === 0 ? '#4da6ff' : '#ff9944',
+                            lineHeight: 1.1,
+                            letterSpacing: '-0.02em',
+                        }}>
+                            {wallHits}
+                        </span>
+                        {bestHits !== Infinity && (
+                            <span style={{
+                                fontSize: '0.5rem',
+                                color: 'rgba(255,255,255,0.2)',
+                                letterSpacing: '0.1em',
+                            }}>
+                                BEST {bestHits}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* ── BOTTOM LEFT — Turbo only ── */}
             <div style={{

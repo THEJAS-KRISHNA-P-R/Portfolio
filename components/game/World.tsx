@@ -12,6 +12,8 @@ import { GoalCelebration } from "./GoalCelebration";
 import { ZONES_ARRAY } from "@/lib/constants";
 import { TriggerZone } from "./TriggerZone";
 import { SpinningText, Aurora } from "../ui";
+const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
+const Maze = React.lazy(() => import("./Maze").then(mod => ({ default: mod.Maze })));
 
 // Key mappings
 const keyboardMap = [
@@ -151,6 +153,13 @@ function WorldEnvironment() {
                 {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp3-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} />)}
             </Instances>
 
+            {/* Lamp Post Physics */}
+            {LAMP_POSITIONS.map((pos, i) => (
+                <RigidBody key={`lamp-phys-${i}`} type="fixed" position={pos}>
+                    <CuboidCollider args={[0.15, 1.75, 0.15]} />
+                </RigidBody>
+            ))}
+
             {/* LAMP POST LIGHTS */}
             {LAMP_POSITIONS.map((pos, i) => (
                 <pointLight key={`light-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} color="#aaffcc" intensity={1.5} distance={12} decay={2} />
@@ -243,6 +252,12 @@ export function World() {
                             <Football />
                             <GoalPost />
                             <GoalCelebration />
+
+                            {/* Corner Games & Ramp (Lazy Loaded) */}
+                            <Suspense fallback={null}>
+                                <Bowling />
+                                <Maze />
+                            </Suspense>
 
                             {/* Trigger Zones */}
                             {ZONES_ARRAY.map(zone => (

@@ -6,8 +6,8 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 
-// Fix 10: moved goal further from spawn
-const GOAL_POS: [number, number, number] = [45, 0, 40];
+// Moved to SE corner
+const GOAL_POS: [number, number, number] = [45, 0, 45];
 const POST_HEIGHT = 3;
 const POST_WIDTH = 5;
 const POST_RADIUS = 0.12;

@@ -24,6 +24,8 @@ const BOOST_DURATION = 2.5
 const BOOST_RECHARGE_DIST = 50
 const BOOST_DRIVE_TO_RECHARGE = 4.0
 
+const ACCEL_RAMP_UP_TIME = 1.5 // Time to reach full acceleration
+
 // Powerslide
 const DRIFT_LATERAL_KEEP = 0.4; // how much lateral velocity to keep during drift (0=full grip, 1=ice)
 const NORMAL_LATERAL_KEEP = 0.05; // very tight grip normally
@@ -37,6 +39,7 @@ export function Car() {
     const cameraTarget = useRef(new THREE.Vector3());
     const timer = useRef(0);
     const currentSpeed = useRef(0);
+    const forwardDriveTime = useRef(0); // For linear acceleration ramp
 
     // Deterministic rotation
     const yaw = useRef(0);
@@ -143,10 +146,13 @@ export function Car() {
 
         let targetSpeed = 0;
         if (isForwardAnalog) {
+            forwardDriveTime.current += dt;
+            const rampProgress = Math.min(1.0, forwardDriveTime.current / ACCEL_RAMP_UP_TIME);
             const engineScale = Math.abs(mobileInput.throttleY) > 0.05 ? Math.abs(mobileInput.throttleY) : 1.0;
-            targetSpeed = maxSpeed * engineScale;
+            targetSpeed = maxSpeed * engineScale * rampProgress;
         }
         else if (isBrakeAnalog) {
+            forwardDriveTime.current = 0;
             // If moving forward, backward = brake first
             if (currentSpeed.current > 1) {
                 targetSpeed = 0; // brake
@@ -163,6 +169,7 @@ export function Car() {
             currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, BRAKE);
         } else {
             // Coasting — gentle deceleration
+            forwardDriveTime.current = 0;
             currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, COAST_DECEL);
         }
 
@@ -227,12 +234,12 @@ export function Car() {
 
         // Speed-based steer reduction — at high speed, effective steer angle shrinks.
         // Formula: 1/(1 + speed×0.12) → at speed=0: 100% steer, speed=18: ~32% steer
-        const steerReduction = 1.0 / (1.0 + absSpeed * 0.12)
+        const steerReduction = 1.0 / (1.0 + absSpeed * 0.10) // Slightly less reduction for tighter turns at speed
         const effectiveSteer = steerAngle.current * steerReduction
 
-        // Raw Ackermann yaw rate, then hard-capped at 2.2 rad/s max
+        // Raw Ackermann yaw rate, then hard-capped
         const rawYawRate = (absSpeed / WHEELBASE) * effectiveSteer * smoothSign
-        const MAX_YAW_RATE = 2.2
+        const MAX_YAW_RATE = 2.8 // Increased from 2.2 for snappier response
         const yawRate = THREE.MathUtils.clamp(rawYawRate, -MAX_YAW_RATE, MAX_YAW_RATE)
 
         // Apply yaw change
@@ -307,13 +314,16 @@ export function Car() {
             setTurboCharge(Math.round(boostCharge.current * 100));
         }
 
-        // ── Fall recovery ────────────────────────────────────────────────
-        if (pos.y < -2) {
-            body.setTranslation({ x: 0, y: 2, z: 0 }, true);
+        // ── Fall recovery / Manual Reset ────────────────────────────────────────────────
+        if (pos.y < -2 || keys.reset) {
+            // If manual reset (keys.reset), pop them UP slightly from their current XZ so they don't fall forever if stuck
+            const newY = keys.reset ? Math.max(pos.y + 4, 2) : 2;
+            const newX = keys.reset ? pos.x : 0;
+            const newZ = keys.reset ? pos.z : 0;
+            body.setTranslation({ x: newX, y: newY, z: newZ }, true);
             body.setLinvel({ x: 0, y: 0, z: 0 }, true);
             body.setAngvel({ x: 0, y: 0, z: 0 }, true);
             currentSpeed.current = 0;
-            yaw.current = 0;
         }
     });
 
@@ -321,6 +331,7 @@ export function Car() {
         <>
             <RigidBody
                 ref={carRef}
+                userData={{ isCar: true }}
                 colliders={false}
                 mass={80}
                 linearDamping={0.4}
@@ -329,10 +340,10 @@ export function Car() {
                 friction={1.0}
                 position={[0, 2, -5]}
             >
-                {/* Main body collider */}
-                <CuboidCollider args={[0.72, 0.22, 1.44]} position={[0, 0.12, 0]} />
-                {/* Low belly — anti-beaching */}
-                <CuboidCollider args={[0.58, 0.11, 1.17]} position={[0, -0.04, 0]} />
+                {/* Main body collider - raised slightly to clear ramp bottoms */}
+                <CuboidCollider args={[0.72, 0.22, 1.44]} position={[0, 0.18, 0]} />
+                {/* Low belly — reduced to prevent beaching on ramp approach */}
+                <CuboidCollider args={[0.58, 0.10, 1.17]} position={[0, -0.01, 0]} />
                 <TurboFlames visible={showFlames} />
                 <CarBody />
             </RigidBody>
@@ -421,8 +432,8 @@ function CarBody() {
             mats.forEach((mat: any, idx: number) => {
                 const m = mat.clone();
                 if (m.name === 'Material') {
-                    // Main body — bright orange
-                    m.color.setStyle('#ff6600');
+                    // Main body — vivid OrangeRed
+                    m.color.setStyle('#ff5500');
                     m.metalness = 0.25;
                     m.roughness = 0.22;
                     m.envMapIntensity = 1.2;

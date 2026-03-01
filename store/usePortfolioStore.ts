@@ -24,6 +24,8 @@ interface PortfolioStore {
     setActiveZone: (zone: string | null) => void;
     isGameMode: boolean;
     setIsGameMode: (val: boolean) => void;
+    hasLoadedOnce: boolean;
+    setHasLoadedOnce: (val: boolean) => void;
     carSpeed: number;
     setCarSpeed: (speed: number) => void;
     teleportTarget: Vector3Tuple | null;
@@ -118,6 +120,9 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
 
     isGameMode: true,
     setIsGameMode: (val) => set({ isGameMode: val }),
+
+    hasLoadedOnce: false,
+    setHasLoadedOnce: (val) => set({ hasLoadedOnce: val }),
 
     carSpeed: 0,
     setCarSpeed: (speed) => set({ carSpeed: speed }),

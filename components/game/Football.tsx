@@ -5,9 +5,10 @@ import { useFrame } from "@react-three/fiber";
 import { useKeyboardControls } from "@react-three/drei";
 import { RigidBody, RapierRigidBody, BallCollider } from "@react-three/rapier";
 import * as THREE from "three";
+import { fireAchievement } from "./AchievementToast";
 
-// Fix 9: moved spawn away from car path, closer to goal
-const SPAWN: [number, number, number] = [45, 1, 20];
+// Moved to SE corner
+const SPAWN: [number, number, number] = [45, 1, 35];
 
 export function Football() {
     const ballRef = useRef<RapierRigidBody>(null);

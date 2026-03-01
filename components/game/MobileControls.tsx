@@ -43,8 +43,16 @@ export function MobileControls() {
         let driveTouchId: number | null = null
         let anchorX = 0
         let anchorY = 0
+        let lastTapTime = 0
 
         const onTouchStart = (e: TouchEvent) => {
+            const now = performance.now();
+            if (now - lastTapTime < 300) {
+                mobileInput.boost = true;
+            } else {
+                mobileInput.boost = false;
+            }
+            lastTapTime = now;
             // Only track the FIRST finger — second+ = camera
             if (driveTouchId !== null) return
             if (e.touches.length > 1) return  // already multi-touch, skip
@@ -139,45 +147,6 @@ export function MobileControls() {
 
     return (
         <>
-            <div style={{
-                position: 'fixed',
-                right: '1.5rem',
-                bottom: '6rem',
-                zIndex: 50,
-                pointerEvents: 'all',
-            }}>
-                <button
-                    onTouchStart={(e) => { e.stopPropagation(); mobileInput.boost = true }}
-                    onTouchEnd={(e) => { e.stopPropagation(); mobileInput.boost = false }}
-                    style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,102,0,0.15)',
-                        border: '1.5px solid rgba(255,102,0,0.55)',
-                        color: '#ff9940',
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '0.58rem',
-                        fontWeight: 700,
-                        letterSpacing: '0.06em',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '3px',
-                        WebkitTapHighlightColor: 'transparent',
-                        userSelect: 'none',
-                        touchAction: 'none',
-                        boxShadow: '0 0 18px rgba(255,102,0,0.12)',
-                        transition: 'all 0.1s ease',
-                    }}
-                >
-                    <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>⚡</span>
-                    BOOST
-                </button>
-            </div>
-
             {showHint && <TouchHint />}
         </>
     )
@@ -224,17 +193,7 @@ function TouchHint() {
                     textTransform: 'uppercase',
                     margin: 0,
                 }}>
-                    Drag anywhere to drive
-                </p>
-                <p style={{
-                    color: 'rgba(255,255,255,0.3)',
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '0.55rem',
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    margin: 0,
-                }}>
-                    Two fingers to move camera
+                    Drag to drive · Double-tap for turbo
                 </p>
             </div>
         </div>

@@ -18,10 +18,13 @@ const NOISE_OCTAVES = 3;
 
 const noise2D = createNoise2D();
 
-// Flatten terrain near zones and center spawn — Fix 2: larger radii
+// Flatten terrain near zones, center spawn, and corners
 const FLAT_ZONES = [
-    { x: 0, z: 0, radius: 14 },     // Fix 2: was 10
-    ...ZONES_ARRAY.map(z => ({ x: z.position[0], z: z.position[2], radius: 12 })),  // Fix 2: was 9
+    { x: 0, z: 0, radius: 14 },     // Center
+    { x: -45, z: -45, radius: 15 }, // NW Corner: Bowling
+    { x: -110, z: 110, radius: 25 },// SW Corner: Maze
+    { x: 45, z: 45, radius: 16 },   // SE Corner: Football
+    ...ZONES_ARRAY.map(z => ({ x: z.position[0], z: z.position[2], radius: 12 })),
 ];
 
 function flattenFactor(wx: number, wz: number): number {
@@ -157,6 +160,14 @@ export function Terrain() {
                     />
                 ))}
             </Instances>
+
+            {/* Tree Physics */}
+            {trees.map((tree, i) => (
+                <RigidBody key={`tree-phys-${i}`} type="fixed" position={[tree.position[0], tree.position[1] + 0.75 * tree.scale, tree.position[2]]}>
+                    <CuboidCollider args={[0.25 * tree.scale, 1.5 * tree.scale, 0.25 * tree.scale]} />
+                </RigidBody>
+            ))}
+
             <Instances castShadow receiveShadow limit={100}>
                 <coneGeometry args={[1, 2.5, 8]} />
                 <meshStandardMaterial color="#2d5a27" />
@@ -169,7 +180,7 @@ export function Terrain() {
                 ))}
             </Instances>
 
-            {/* 4. BOULDERS (Instanced Visuals + Invisible Physics) */}
+            {/* 4. BOULDERS (Instanced Visuals) */}
             <Instances castShadow receiveShadow limit={50}>
                 <icosahedronGeometry args={[1, 0]} />
                 <meshStandardMaterial color="#3a3a3a" roughness={0.9} />
@@ -183,9 +194,10 @@ export function Terrain() {
                 ))}
             </Instances>
 
+            {/* Boulder Physics (Invisible true spheres) */}
             {boulders.map((b, i) => (
-                <RigidBody key={`boulder-phys-${i}`} type="fixed" position={b.position}>
-                    <BallCollider args={[b.scale * 0.9]} />
+                <RigidBody key={`boulder-phys-${i}`} type="fixed" position={[b.position[0], b.position[1], b.position[2]]}>
+                    <BallCollider args={[b.scale]} />
                 </RigidBody>
             ))}
 
