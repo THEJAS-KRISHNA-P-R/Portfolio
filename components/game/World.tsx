@@ -161,6 +161,13 @@ function WorldEnvironment() {
                 </RigidBody>
             ))}
 
+            {/* Tree Physics — simple cylinder collider for trunks only */}
+            {TREE_POSITIONS.map((pos, i) => (
+                <RigidBody key={`tree-phys-${i}`} type="fixed" position={[pos[0], pos[1] + 0.6, pos[2]]}>
+                    <CuboidCollider args={[0.2, 0.6, 0.2]} />
+                </RigidBody>
+            ))}
+
             {/* LAMP POST LIGHTS */}
             {LAMP_POSITIONS.map((pos, i) => (
                 <pointLight key={`light-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} color="#aaffcc" intensity={1.5} distance={12} decay={2} />
@@ -196,6 +203,7 @@ function WorldEnvironment() {
                     <boxGeometry args={[8, 0.6, 4]} />
                     <meshStandardMaterial color="#0d2a18" roughness={0.9} />
                 </mesh>
+                <CuboidCollider args={[4, 0.3, 2]} position={[25, 0.3, 0]} rotation={[0, 0, -0.18] as any} />
             </RigidBody>
 
             {/* Second ramp */}
@@ -204,6 +212,7 @@ function WorldEnvironment() {
                     <boxGeometry args={[8, 0.6, 4]} />
                     <meshStandardMaterial color="#0d2a18" roughness={0.9} />
                 </mesh>
+                <CuboidCollider args={[4, 0.3, 2]} position={[-25, 0.3, 0]} rotation={[0, 0, 0.18] as any} />
             </RigidBody>
         </>
     )
