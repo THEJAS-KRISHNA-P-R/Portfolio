@@ -11,7 +11,13 @@ import { StandardPortfolio } from "@/components/ui/StandardPortfolio";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { MobileControls } from "@/components/game/MobileControls";
 import { GameLoadingScreen } from "@/components/game/GameLoadingScreen";
-import { LandscapeToast } from "@/components/game/LandscapeToast";
+import { LandscapeToast } from "@/components/game/LandscapeToast"
+import { MazeModeModal } from "@/components/game/MazeModeModal"
+import { GameClearBanner } from "@/components/game/GameClearBanner"
+import { CheatCodeManager } from "@/components/game/CheatCodeManager"
+import { GameNotifContainer } from "@/components/game/GameNotifications"
+import { MazeHUDOverlay } from "@/components/game/MazeHUDOverlay"
+import { FootballScoreOverlay } from "@/components/game/FootballScoreOverlay"
 
 export default function Home() {
   const isGameMode = usePortfolioStore((s) => s.isGameMode);
@@ -58,6 +64,12 @@ export default function Home() {
           <World />
           <HUD />
           <LandscapeToast />
+          <GameNotifContainer />
+          <MazeModeModal />
+          <CheatCodeManager />
+          <MazeHUDOverlay />
+          <FootballScoreOverlay />
+          <GameClearBanner />
           <TurboVignette />
           <ZoneConfirmModal />
           <SkipButton />

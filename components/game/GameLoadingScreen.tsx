@@ -117,6 +117,7 @@ export function GameLoadingScreen({ onComplete }: GameLoadingScreenProps) {
                 position: 'fixed',
                 inset: 0,
                 zIndex: 1000,
+                isolation: 'isolate',
                 background: '#030d07',
                 display: 'flex',
                 flexDirection: 'column',

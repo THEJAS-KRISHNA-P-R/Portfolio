@@ -5,6 +5,8 @@ import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
+import { fireAchievement } from "./AchievementToast";
+import { fireNotif } from "@/components/game/GameNotifications";
 
 // Moved to SE corner
 const GOAL_POS: [number, number, number] = [45, 0, 45];
@@ -17,6 +19,7 @@ export function GoalPost() {
     const [showScore, setShowScore] = useState(false)
     const [displayScore, setDisplayScore] = useState<{ value: number; isHighScore: boolean } | null>(null)
     const highScore = useRef(0)
+    const setFootballScore = usePortfolioStore(s => s.setFootballScore)
 
     const handleGoal = (event: any) => {
         // Try rigidBodyObject first, fall back to collider parent
@@ -32,16 +35,52 @@ export function GoalPost() {
 
         const scoreValue = Math.round(speed * 10);
         const currentHigh = highScore.current;
+        setFootballScore(scoreValue);
 
         if (scoreValue > currentHigh) {
             highScore.current = scoreValue;
             setDisplayScore({ value: scoreValue, isHighScore: true });
             setShowScore(true);
             setTimeout(() => { setShowScore(false); setDisplayScore(null); }, 4000);
+            fireAchievement({
+                type: 'football',
+                title: 'GOAL!',
+                value: `${scoreValue} pts`,
+                subtext: '★ New record!',
+                isRecord: true,
+                duration: 4000,
+            });
+            fireNotif({
+                type: 'goal',
+                title: 'GOAL!',
+                value: `${scoreValue} pts`,
+                subtext: '🏆 New high score!',
+                isRecord: true,
+                color: '#00e676',
+                duration: 4000,
+            });
+            window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: true, value: `${scoreValue} pts` } }));
         } else {
             setDisplayScore({ value: scoreValue, isHighScore: false });
             setShowScore(true);
             setTimeout(() => { setShowScore(false); setDisplayScore(null); }, 2000);
+            fireAchievement({
+                type: 'football',
+                title: 'GOAL!',
+                value: `${scoreValue} pts`,
+                subtext: `Best: ${currentHigh} pts`,
+                duration: 2500,
+            });
+            fireNotif({
+                type: 'goal',
+                title: 'GOAL!',
+                value: `${scoreValue} pts`,
+                subtext: `Best: ${currentHigh} pts`,
+                isRecord: false,
+                color: '#00e676',
+                duration: 4000,
+            });
+            window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: false, value: `${scoreValue} pts` } }));
         }
     };
 

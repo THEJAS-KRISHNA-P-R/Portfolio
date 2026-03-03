@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useKeyboardControls, useGLTF } from "@react-three/drei";
-import { RigidBody, RapierRigidBody, CuboidCollider } from "@react-three/rapier";
+import { RigidBody, RapierRigidBody, CuboidCollider, useRapier } from "@react-three/rapier";
 import * as THREE from "three";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { mobileInput } from "@/components/game/MobileControls";
@@ -31,13 +31,28 @@ const DRIFT_LATERAL_KEEP = 0.4; // how much lateral velocity to keep during drif
 const NORMAL_LATERAL_KEEP = 0.05; // very tight grip normally
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Maze mode flag: disables R-key reset while inside maze ─────────────────
+let _inMaze = false
+
+// ── Cheat flags (module-level so useFrame reads them without closure stale issues) ──
+let _infiniteBoost = false
+let _maxSpeedActive = false
+let _maxSpeedTimer = 0
+
+// ── Shared game state — plain object, never in Zustand ─────────────────────
+// Write here in useFrame (60fps), read by HUD/TurboVignette at 10-20fps poll.
+export const gameState = {
+    speed: 0,        // raw m/s (unsigned)
+    turboCharge: 0,  // 0..1
+}
+
 export function Car() {
     const carRef = useRef<RapierRigidBody>(null);
+    const { world } = useRapier();
     const [, getKeys] = useKeyboardControls();
     const [ready, setReady] = useState(false);
     const [showFlames, setShowFlames] = useState(false);
     const cameraTarget = useRef(new THREE.Vector3());
-    const timer = useRef(0);
     const currentSpeed = useRef(0);
     const forwardDriveTime = useRef(0); // For linear acceleration ramp
 
@@ -61,8 +76,6 @@ export function Car() {
     const boostTimer = useRef(0);
     const driveTimeAccum = useRef(0);
 
-    const setCarSpeed = usePortfolioStore(s => s.setCarSpeed);
-    const setTurboCharge = usePortfolioStore(s => s.setTurboCharge);
     const mobileTurbo = usePortfolioStore(s => s.mobileTurbo);
     const teleportTarget = usePortfolioStore(s => s.teleportTarget);
     const setTeleportTarget = usePortfolioStore(s => s.setTeleportTarget);
@@ -83,6 +96,43 @@ export function Car() {
         currentSpeed.current = 0;
         setTeleportTarget(null);
     }, [teleportTarget, setTeleportTarget]);
+
+    // Maze flag — block R key while inside maze
+    useEffect(() => {
+        const onEnter = () => { _inMaze = true }
+        const onLeave = () => { _inMaze = false }
+        window.addEventListener('maze:mode-active', onEnter)
+        window.addEventListener('maze:exited', onLeave)
+        window.addEventListener('maze:cleared', onLeave)
+        return () => {
+            window.removeEventListener('maze:mode-active', onEnter)
+            window.removeEventListener('maze:exited', onLeave)
+            window.removeEventListener('maze:cleared', onLeave)
+        }
+    }, [])
+
+    // Cheat code handlers
+    useEffect(() => {
+        const onBoost = () => {
+            _infiniteBoost = !_infiniteBoost
+        }
+        const onMoon = () => {
+            const isMoon = Math.abs((world.gravity as unknown as { x: number; y: number; z: number }).y + 1.96) < 0.1
+            ;(world.gravity as unknown as { x: number; y: number; z: number }).y = isMoon ? -9.81 : -1.96
+        }
+        const onSpeed = () => {
+            _maxSpeedActive = true
+            _maxSpeedTimer = 30
+        }
+        window.addEventListener('cheat:infinite-boost', onBoost)
+        window.addEventListener('cheat:moon-gravity', onMoon)
+        window.addEventListener('cheat:max-speed', onSpeed)
+        return () => {
+            window.removeEventListener('cheat:infinite-boost', onBoost)
+            window.removeEventListener('cheat:moon-gravity', onMoon)
+            window.removeEventListener('cheat:max-speed', onSpeed)
+        }
+    }, [world])
 
     useFrame((state, delta) => {
         const body = carRef.current;
@@ -140,8 +190,16 @@ export function Car() {
         const shouldBoost = isBoost || mobileTurbo;
         // ────────────────────────────────────────────────────────────────────────
 
+        // ── Cheat: max speed timer tick ──────────────────────────────────
+        if (_maxSpeedActive) {
+            _maxSpeedTimer -= dt;
+            if (_maxSpeedTimer <= 0) { _maxSpeedActive = false; _maxSpeedTimer = 0; }
+        }
+        const effectiveTopSpeed   = _maxSpeedActive ? TOP_SPEED * 3   : TOP_SPEED;
+        const effectiveBoostSpeed = _maxSpeedActive ? BOOST_SPEED * 3 : BOOST_SPEED;
+
         // ── Speed ────────────────────────────────────────────────────────
-        const maxSpeed = boostActive.current ? BOOST_SPEED : TOP_SPEED;
+        const maxSpeed = boostActive.current ? effectiveBoostSpeed : effectiveTopSpeed;
         const accel = boostActive.current ? BOOST_ACCEL : ACCEL;
 
         let targetSpeed = 0;
@@ -192,6 +250,16 @@ export function Car() {
             boostCharge.current = 0.0;
             driveTimeAccum.current = 0;
             setShowFlames(true);
+        }
+
+        // Cheat: infinite boost — keep charge full and boost permanently active
+        if (_infiniteBoost) {
+            boostCharge.current = 1.0
+            if (!boostActive.current && Math.abs(currentSpeed.current) > 0.1) {
+                boostActive.current = true
+                setShowFlames(true)
+            }
+            if (boostActive.current) boostTimer.current = BOOST_DURATION // reset timer so it never expires
         }
 
         if (boostActive.current) {
@@ -307,15 +375,12 @@ export function Car() {
         cam.fov = THREE.MathUtils.lerp(cam.fov, targetFOV, 0.08);
         cam.updateProjectionMatrix();
 
-        // ── HUD (throttled) ──────────────────────────────────────────────
-        timer.current++;
-        if (timer.current % 5 === 0) {
-            setCarSpeed(Math.round(Math.abs(currentSpeed.current) * 10) / 10);
-            setTurboCharge(Math.round(boostCharge.current * 100));
-        }
+        // ── gameState (plain object — zero React overhead) ────────────────
+        gameState.speed = Math.abs(currentSpeed.current);
+        gameState.turboCharge = boostCharge.current;
 
         // ── Fall recovery / Manual Reset ────────────────────────────────────────────────
-        if (pos.y < -2 || keys.reset) {
+        if (pos.y < -2 || (keys.reset && !_inMaze)) {
             // If manual reset (keys.reset), pop them UP slightly from their current XZ so they don't fall forever if stuck
             const newY = keys.reset ? Math.max(pos.y + 4, 2) : 2;
             const newX = keys.reset ? pos.x : 0;

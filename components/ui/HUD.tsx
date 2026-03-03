@@ -2,41 +2,29 @@
 
 import { useState, useEffect } from "react"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { gameState } from "@/components/game/Car"
 
 export default function HUD() {
     const isGameMode = usePortfolioStore(s => s.isGameMode)
     const setIsGameMode = usePortfolioStore(s => s.setIsGameMode)
-    const carSpeed = usePortfolioStore(s => s.carSpeed)
-    const turboCharge = usePortfolioStore(s => s.turboCharge)
+    const [displaySpeed, setDisplaySpeed] = useState(0)
+    const [displayTurbo, setDisplayTurbo] = useState(100)
     const [showControls, setShowControls] = useState(true)
     const [isFullscreen, setIsFullscreen] = useState(false)
-    const [wallHits, setWallHits] = useState<number | null>(null)
-    const [mazeMode, setMazeMode] = useState<'reset' | 'counter' | null>(null)
-    const [bestHits, setBestHits] = useState<number>(Infinity)
+    const [mazeRunning, setMazeRunning] = useState(false)
 
     useEffect(() => {
-        const onHitUpdate = (e: any) => {
-            setWallHits(e.detail.count)
-            setBestHits(e.detail.bestHits)
-            setMazeMode('counter')
-        }
-        const onModeChange = (e: any) => {
-            setMazeMode(e.detail.mode)
-            setBestHits(e.detail.bestHits)
-            setWallHits(e.detail.mode === 'counter' ? 0 : null)
-        }
-        const onMazeClear = () => {
-            setMazeMode(null)
-            setWallHits(null)
-        }
-
-        window.addEventListener('maze-hit-update', onHitUpdate)
-        window.addEventListener('maze-mode-change', onModeChange)
-        window.addEventListener('maze-clear', onMazeClear)
+        const onActive = () => setMazeRunning(true)
+        const onDone = () => setMazeRunning(false)
+        window.addEventListener('maze:mode-active', onActive)
+        window.addEventListener('maze:cleared', onDone)
+        window.addEventListener('maze:reset', onDone)
+        window.addEventListener('maze:exited', onDone)
         return () => {
-            window.removeEventListener('maze-hit-update', onHitUpdate)
-            window.removeEventListener('maze-mode-change', onModeChange)
-            window.removeEventListener('maze-clear', onMazeClear)
+            window.removeEventListener('maze:mode-active', onActive)
+            window.removeEventListener('maze:cleared', onDone)
+            window.removeEventListener('maze:reset', onDone)
+            window.removeEventListener('maze:exited', onDone)
         }
     }, [])
 
@@ -44,6 +32,15 @@ export default function HUD() {
         const onChange = () => setIsFullscreen(!!document.fullscreenElement)
         document.addEventListener('fullscreenchange', onChange)
         return () => document.removeEventListener('fullscreenchange', onChange)
+    }, [])
+
+    // Poll gameState at 10fps — imperceptible lag, eliminates 60fps Zustand renders
+    useEffect(() => {
+        const id = setInterval(() => {
+            setDisplaySpeed(Math.round(gameState.speed * 3.6))
+            setDisplayTurbo(Math.round(gameState.turboCharge * 100))
+        }, 100)
+        return () => clearInterval(id)
     }, [])
 
     const toggleFullscreen = async () => {
@@ -97,7 +94,7 @@ export default function HUD() {
                     backdropFilter: 'blur(8px)',
                     textAlign: 'center',
                 }}>
-                    <h2 style={{ color: '#00e676', fontWeight: 700, fontSize: '14px', margin: 0, letterSpacing: '0.08em' }}>
+                    <h2 style={{ color: '#00e676', fontWeight: 700, fontSize: 'clamp(0.6rem, 1.8vw, 0.85rem)', margin: 0, letterSpacing: '0.08em' }}>
                         PORTFOLIO WORLD
                     </h2>
                     <p style={{ color: '#4a7a5a', fontSize: '11px', margin: '2px 0 0 0' }}>
@@ -105,61 +102,6 @@ export default function HUD() {
                     </p>
                 </div>
             </div>
-
-            {/* ── Maze Counter Pill ── */}
-            {mazeMode === 'counter' && wallHits !== null && (
-                <div style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 30,
-                    pointerEvents: 'none',
-                    fontFamily: "'JetBrains Mono', monospace",
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.15rem',
-                }}>
-                    <div style={{
-                        background: 'rgba(0,10,26,0.85)',
-                        border: '1px solid rgba(0,150,255,0.35)',
-                        borderRadius: '12px',
-                        padding: '0.4rem 1.1rem',
-                        backdropFilter: 'blur(10px)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                    }}>
-                        <span style={{
-                            fontSize: '0.5rem',
-                            color: 'rgba(77,166,255,0.55)',
-                            letterSpacing: '0.16em',
-                            textTransform: 'uppercase',
-                        }}>
-                            WALL HITS
-                        </span>
-                        <span style={{
-                            fontSize: '1.6rem',
-                            fontWeight: 800,
-                            color: wallHits === 0 ? '#4da6ff' : '#ff9944',
-                            lineHeight: 1.1,
-                            letterSpacing: '-0.02em',
-                        }}>
-                            {wallHits}
-                        </span>
-                        {bestHits !== Infinity && (
-                            <span style={{
-                                fontSize: '0.5rem',
-                                color: 'rgba(255,255,255,0.2)',
-                                letterSpacing: '0.1em',
-                            }}>
-                                BEST {bestHits}
-                            </span>
-                        )}
-                    </div>
-                </div>
-            )}
 
             {/* ── BOTTOM LEFT — Turbo only ── */}
             <div style={{
@@ -176,22 +118,22 @@ export default function HUD() {
                     fontSize: '0.58rem',
                     letterSpacing: '0.16em',
                     textTransform: 'uppercase',
-                    color: turboCharge >= 100 ? '#00e676' : '#ff9940',
+                    color: displayTurbo >= 100 ? '#00e676' : '#ff9940',
                     fontFamily: "'JetBrains Mono', monospace",
                 }}>
-                    {turboCharge >= 100 ? 'Turbo Ready' : `Charging ${Math.round(turboCharge)}%`}
+                    {displayTurbo >= 100 ? 'Turbo Ready' : `Charging ${Math.round(displayTurbo)}%`}
                 </span>
                 <div className="hud-turbo-bar" style={{
-                    width: '120px',
+                    width: 'clamp(80px, 20vw, 140px)',
                     height: '3px',
                     background: 'rgba(255,255,255,0.07)',
                     borderRadius: '9999px',
                 }}>
                     <div style={{
                         height: '100%',
-                        width: `${Math.round(turboCharge)}%`,
+                        width: `${Math.round(displayTurbo)}%`,
                         borderRadius: '9999px',
-                        background: turboCharge >= 100
+                        background: displayTurbo >= 100
                             ? '#00e676'
                             : 'linear-gradient(to right, #ff6600, #ff9900)',
                         transition: 'width 0.15s linear',
@@ -199,13 +141,13 @@ export default function HUD() {
                 </div>
             </div>
 
-            {/* ── Controls panel — sits above turbo bar ── */}
+            {/* ── Controls panel — sits above turbo bar, hidden during maze ── */}
             <div className="hud-controls-panel" style={{
                 position: 'absolute',
                 bottom: '4.5rem',
                 left: '1rem',
                 pointerEvents: 'none',
-                opacity: showControls ? 1 : 0,
+                opacity: (showControls && !mazeRunning) ? 1 : 0,
                 transition: 'opacity 1s ease',
                 zIndex: 10,
             }}>
@@ -259,13 +201,13 @@ export default function HUD() {
                 <div style={{ pointerEvents: 'none', textAlign: 'right' }}>
                     <div className="hud-speed-value" style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '1.4rem',
+                        fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
                         fontWeight: 700,
                         color: '#00e676',
                         lineHeight: 1,
                         letterSpacing: '-0.02em',
                     }}>
-                        {Math.round(carSpeed * 3.6)}
+                        {displaySpeed}
                     </div>
                     <div style={{
                         fontSize: '0.5rem',

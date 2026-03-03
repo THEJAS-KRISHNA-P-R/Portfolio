@@ -1,8 +1,8 @@
 "use client";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect, memo } from "react";
 import * as THREE from "three";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { AdaptiveEvents, PerformanceMonitor, KeyboardControls, Environment, Stars, Instances, Instance } from "@react-three/drei";
 import { Physics, RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Car } from "./Car";
@@ -12,6 +12,7 @@ import { GoalCelebration } from "./GoalCelebration";
 import { ZONES_ARRAY } from "@/lib/constants";
 import { TriggerZone } from "./TriggerZone";
 import { SpinningText, Aurora } from "../ui";
+import { usePortfolioStore } from "@/store/usePortfolioStore";
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
 const Maze = React.lazy(() => import("./Maze").then(mod => ({ default: mod.Maze })));
 
@@ -208,9 +209,18 @@ function WorldEnvironment() {
     )
 }
 
+function FrameloopManager() {
+    const { setFrameloop } = useThree()
+    const isGameMode = usePortfolioStore(s => s.isGameMode)
+    useEffect(() => {
+        setFrameloop(isGameMode ? 'always' : 'demand')
+    }, [isGameMode, setFrameloop])
+    return null
+}
+
 export function World() {
     return (
-        <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none' }}>
+        <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none', zIndex: 1 }}>
             <Suspense fallback={<WorldFallback />}>
                 <KeyboardControls map={keyboardMap}>
                     <Canvas
@@ -223,6 +233,7 @@ export function World() {
                         {/* Performance */}
                         <AdaptiveEvents />
                         <PerformanceMonitor />
+                        <FrameloopManager />
 
                         {/* Scene */}
                         <ambientLight intensity={0.6} />
@@ -241,7 +252,12 @@ export function World() {
                         <fog attach="fog" args={['#0a0a0f', 55, 130]} />
 
                         {/* Physics */}
-                        <Physics gravity={[0, -15, 0]} debug={false}>
+                        <Physics
+                            gravity={[0, -9.81, 0]}
+                            timeStep={1/60}
+                            interpolate
+                            colliders={false}
+                        >
                             {/* Ground first — synchronous */}
                             <WorldEnvironment />
 

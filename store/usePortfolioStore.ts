@@ -40,6 +40,9 @@ interface PortfolioStore {
     setScrollTarget: (id: string | null) => void;
     goals: number;
     incrementGoals: () => void;
+    footballScore: number;
+    footballHighScore: number;
+    setFootballScore: (n: number) => void;
 
     // Projects (persisted)
     projects: Project[];
@@ -144,6 +147,12 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
 
     goals: 0,
     incrementGoals: () => set((state) => ({ goals: state.goals + 1 })),
+    footballScore: 0,
+    footballHighScore: 0,
+    setFootballScore: (n: number) => set((s) => ({
+        footballScore: n,
+        footballHighScore: Math.max(n, s.footballHighScore),
+    })),
 
     // Persisted initial state
     projects: initialProjects,

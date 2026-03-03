@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect, memo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { RigidBody, CuboidCollider, BallCollider } from "@react-three/rapier";
 import { Html, RoundedBox, Instances, Instance } from "@react-three/drei";
@@ -72,7 +72,7 @@ function heightColor(h: number): THREE.Color {
     return mid.clone().lerp(high, (t - 0.5) * 2);
 }
 
-export function Terrain() {
+export const Terrain = memo(function Terrain() {
     // Build geometry once — Fix 0c: heightData removed from return
     const { geometry, trees, boulders } = useMemo(() => {
         const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEGMENTS, SEGMENTS);
@@ -132,6 +132,9 @@ export function Terrain() {
 
         return { geometry: geo, trees: tempTrees, boulders: tempBoulders };
     }, []);
+
+    // Dispose geometry when component unmounts
+    useEffect(() => () => { geometry.dispose() }, [geometry])
 
     return (
         <>
@@ -224,7 +227,7 @@ export function Terrain() {
             <pointLight color="#ffffff" intensity={0.5} distance={8} position={[45, 2, 30]} />
         </>
     );
-}
+})
 
 // Animated emissive zone buildings
 function ZoneBuilding({ zone }: { zone: typeof ZONES_ARRAY[0] }) {

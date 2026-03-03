@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, memo } from "react";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Html } from "@react-three/drei";
 import { fireAchievement } from "./AchievementToast";
@@ -21,7 +21,9 @@ const SPAWN_REL: [number, number, number] = [0, 1.5, HALF + 4];
 // ── Persistent high score ────────────────────────────────────────────────
 let globalBestTime = Infinity;
 let globalBestHits = Infinity;
-
+// ── Cheat: ghost mode — wall hits have no effect ────────────────────
+let _ghostMode = false;
+let _ghostTimer: ReturnType<typeof setTimeout> | null = null;
 // ─────────────────────────────────────────────────────────────────────────
 // WALL DEFINITIONS — relative to maze center
 // Each wall: [cx, cz, halfW, halfD] where W=X extent, D=Z extent
@@ -94,11 +96,10 @@ const ALL_WALLS = [...OUTER, ...INNER];
 // ─────────────────────────────────────────────────────────────────────────
 type MazeMode = "reset" | "counter" | null;
 
-export function Maze() {
+export const Maze = memo(function Maze() {
     const setTeleportTarget = usePortfolioStore(s => s.setTeleportTarget);
 
     // Modal state
-    const [showModal, setShowModal] = useState(false);
     const [mode, setMode] = useState<MazeMode>(null);
     const [modalShown, setModalShown] = useState(false);  // only show once per entry
 
@@ -111,9 +112,11 @@ export function Maze() {
     const startTime = useRef(0);
     const hitCooldown = useRef(false);
     const modeRef = useRef<MazeMode>(null);
+    const runningRef = useRef(false);
 
-    // Keep modeRef in sync with state
+    // Keep modeRef and runningRef in sync with state
     useEffect(() => { modeRef.current = mode; }, [mode]);
+    useEffect(() => { runningRef.current = running; }, [running]);
 
     // ── Spawn car at maze entrance ──────────────────────────────────────────
     const respawnToStart = useCallback(() => {
@@ -128,8 +131,8 @@ export function Maze() {
     const handleTriggerEnter = (e: any) => {
         const obj = e.other?.rigidBodyObject;
         if (!obj?.userData?.isCar) return;
-        if (modalShown && mode !== null) return;  // already playing
-        setShowModal(true);
+        if (modalShown && mode !== null) return;
+        window.dispatchEvent(new CustomEvent('maze:show-modal'));
         setModalShown(true);
     };
 
@@ -141,6 +144,8 @@ export function Maze() {
             startTime.current = performance.now();
             setRunning(true);
             setHitCount(0);
+            // Re-notify HUD (covers both first entry AND re-entry after reset)
+            window.dispatchEvent(new CustomEvent('maze:mode-active', { detail: { mode: modeRef.current } }));
         }
     };
 
@@ -161,15 +166,19 @@ export function Maze() {
             type: 'maze',
             title: isRecord ? '★ MAZE RECORD' : 'MAZE CLEAR',
             value: `${elapsed.toFixed(2)}s`,
-            subtext: isRecord ? 'New best!' : `Best: ${globalBestTime.toFixed(2)}s`,
+            subtext: isRecord ? 'New best time!' : `Best: ${globalBestTime.toFixed(2)}s`,
             color: '#00bfff',
             isRecord,
-            duration: 4000
+            duration: 4500,
         });
 
-        window.dispatchEvent(new CustomEvent('maze-clear'))
+        window.dispatchEvent(new CustomEvent('maze:cleared'));
+        window.dispatchEvent(new CustomEvent('maze:exited'));  // clears HUD mode overlay
+        window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'maze', isRecord, value: `${elapsed.toFixed(2)}s` } }));
 
-        // Let user re-enter for another run
+        // Reset so car can re-enter for a fresh run
+        setMode(null);
+        modeRef.current = null;
         setModalShown(false);
     };
 
@@ -178,6 +187,8 @@ export function Maze() {
         const obj = e.other?.rigidBodyObject;
         if (!obj?.userData?.isCar) return;
         if (!modeRef.current) return;
+        if (!runningRef.current) return; // not in an active run
+        if (_ghostMode) return;          // cheat: ghost mode active
         if (hitCooldown.current) return;
 
         hitCooldown.current = true;
@@ -187,15 +198,8 @@ export function Maze() {
             setRunning(false);
             startTime.current = 0;
             respawnToStart();
-            // Brief alert
-            fireAchievement({
-                type: 'maze',
-                title: 'WALL HIT',
-                value: 'RESET',
-                subtext: 'Respawning...',
-                color: '#ff2200',
-                duration: 2000
-            });
+            window.dispatchEvent(new CustomEvent('maze:reset'));
+            fireAchievement({ type: 'maze', title: 'WALL HIT', value: 'RESET', subtext: 'Teleporting back to start…', color: '#ff2200', duration: 2000 });
         } else {
             // Counter mode
             setHitCount(c => {
@@ -204,21 +208,48 @@ export function Maze() {
                     globalBestHits = next;
                     setBestHits(next);
                 }
-                window.dispatchEvent(new CustomEvent('maze-hit-update', { detail: { count: next, bestHits: globalBestHits } }))
+                window.dispatchEvent(new CustomEvent('maze:wall-hit', { detail: { count: next } }));
+                fireAchievement({ type: 'maze', title: 'WALL HIT', value: `${next}×`, subtext: 'Keep going!', color: '#ff9944', duration: 1800 });
                 return next;
             });
         }
     };
 
-    // ── Mode selection ───────────────────────────────────────────────────────
-    const selectMode = (m: MazeMode) => {
-        setMode(m);
-        setShowModal(false);
-        setHitCount(0);
-        startTime.current = performance.now();
-        setRunning(true);
-        window.dispatchEvent(new CustomEvent('maze-mode-change', { detail: { mode: m, bestHits: globalBestHits } }))
-    };
+    // ── Mode selection via event bus + ghost mode cheat ───────────────────────
+    useEffect(() => {
+        const onSelected = (e: Event) => {
+            const { mode: m } = (e as CustomEvent).detail as { mode: 'reset' | 'counter' };
+            setMode(m);
+            modeRef.current = m;
+            setHitCount(0);
+            startTime.current = 0;
+            setRunning(false);
+            // Timer starts on entry sensor — don't start it here
+            window.dispatchEvent(new CustomEvent('maze:mode-active', { detail: { mode: m } }));
+        };
+        const onExit = () => {
+            setMode(null);
+            modeRef.current = null;
+            setRunning(false);
+            startTime.current = 0;
+            setHitCount(0);
+            setModalShown(false);
+            window.dispatchEvent(new CustomEvent('maze:exited'));
+        };
+        const onGhost = () => {
+            _ghostMode = true;
+            if (_ghostTimer) clearTimeout(_ghostTimer);
+            _ghostTimer = setTimeout(() => { _ghostMode = false; _ghostTimer = null; }, 30000);
+        };
+        window.addEventListener('maze:mode-selected', onSelected);
+        window.addEventListener('maze:exit', onExit);
+        window.addEventListener('cheat:ghost-mode', onGhost);
+        return () => {
+            window.removeEventListener('maze:mode-selected', onSelected);
+            window.removeEventListener('maze:exit', onExit);
+            window.removeEventListener('cheat:ghost-mode', onGhost);
+        };
+    }, []);
 
     const wallColor = '#001a3a';
     const wallEmissive = '#00bfff';
@@ -418,149 +449,7 @@ export function Maze() {
             {/* ── Ambient lighting ─────────────────────────────────────────── */}
             <pointLight position={[0, 6, 0]} color="#00bfff" intensity={2.5} distance={40} decay={2} />
 
-            {/* ── MODE SELECTION MODAL (in-world Html) ─────────────────────── */}
-            {showModal && (
-                <Html position={[0, 8, HALF - 2]} center distanceFactor={10}>
-                    <div style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        background: 'rgba(2, 8, 18, 0.96)',
-                        border: '1px solid rgba(0,191,255,0.3)',
-                        borderRadius: '16px',
-                        padding: '1.4rem 1.8rem',
-                        backdropFilter: 'blur(20px)',
-                        WebkitBackdropFilter: 'blur(20px)',
-                        boxShadow: '0 0 60px rgba(0,191,255,0.12), 0 16px 48px rgba(0,0,0,0.7)',
-                        textAlign: 'center',
-                        minWidth: '220px',
-                        pointerEvents: 'all',
-                    }}>
-                        <div style={{
-                            fontSize: '0.6rem',
-                            color: 'rgba(0,191,255,0.5)',
-                            letterSpacing: '0.2em',
-                            textTransform: 'uppercase',
-                            marginBottom: '0.3rem',
-                        }}>
-                            MAZE MODE
-                        </div>
-                        <div style={{
-                            fontSize: '1rem',
-                            color: '#e8f5e9',
-                            fontWeight: 700,
-                            letterSpacing: '0.06em',
-                            marginBottom: '0.25rem',
-                        }}>
-                            Choose Difficulty
-                        </div>
-                        <div style={{
-                            fontSize: '0.58rem',
-                            color: 'rgba(255,255,255,0.3)',
-                            letterSpacing: '0.05em',
-                            marginBottom: '1.2rem',
-                            lineHeight: 1.6,
-                        }}>
-                            Drive from ENTER to EXIT
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
-                            {/* RESET MODE — red = harder */}
-                            <button
-                                onClick={() => selectMode('reset')}
-                                style={{
-                                    flex: 1,
-                                    padding: '0.65rem 0.5rem',
-                                    borderRadius: '10px',
-                                    border: '1.5px solid rgba(255,50,50,0.5)',
-                                    background: 'rgba(255,30,30,0.1)',
-                                    color: '#ff5555',
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '0.62rem',
-                                    fontWeight: 700,
-                                    letterSpacing: '0.1em',
-                                    textTransform: 'uppercase',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    gap: '0.3rem',
-                                    transition: 'all 0.15s ease',
-                                }}
-                                onMouseEnter={e => {
-                                    e.currentTarget.style.background = 'rgba(255,30,30,0.22)'
-                                    e.currentTarget.style.borderColor = 'rgba(255,50,50,0.8)'
-                                }}
-                                onMouseLeave={e => {
-                                    e.currentTarget.style.background = 'rgba(255,30,30,0.1)'
-                                    e.currentTarget.style.borderColor = 'rgba(255,50,50,0.5)'
-                                }}
-                            >
-                                <span style={{ fontSize: '1.2rem' }}>💥</span>
-                                <span>RESET</span>
-                                <span style={{ fontSize: '0.5rem', color: 'rgba(255,85,85,0.6)', fontWeight: 400 }}>
-                                    Hit = restart
-                                </span>
-                            </button>
-
-                            {/* COUNTER MODE — blue = easier */}
-                            <button
-                                onClick={() => selectMode('counter')}
-                                style={{
-                                    flex: 1,
-                                    padding: '0.65rem 0.5rem',
-                                    borderRadius: '10px',
-                                    border: '1.5px solid rgba(0,150,255,0.5)',
-                                    background: 'rgba(0,120,255,0.1)',
-                                    color: '#4da6ff',
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '0.62rem',
-                                    fontWeight: 700,
-                                    letterSpacing: '0.1em',
-                                    textTransform: 'uppercase',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    gap: '0.3rem',
-                                    transition: 'all 0.15s ease',
-                                }}
-                                onMouseEnter={e => {
-                                    e.currentTarget.style.background = 'rgba(0,120,255,0.22)'
-                                    e.currentTarget.style.borderColor = 'rgba(0,150,255,0.8)'
-                                }}
-                                onMouseLeave={e => {
-                                    e.currentTarget.style.background = 'rgba(0,120,255,0.1)'
-                                    e.currentTarget.style.borderColor = 'rgba(0,150,255,0.5)'
-                                }}
-                            >
-                                <span style={{ fontSize: '1.2rem' }}>🔢</span>
-                                <span>COUNTER</span>
-                                <span style={{ fontSize: '0.5rem', color: 'rgba(77,166,255,0.6)', fontWeight: 400 }}>
-                                    Count hits
-                                </span>
-                            </button>
-                        </div>
-
-                        {/* Dismiss */}
-                        <button
-                            onClick={() => setShowModal(false)}
-                            style={{
-                                marginTop: '0.75rem',
-                                width: '100%',
-                                padding: '0.3rem',
-                                background: 'none',
-                                border: 'none',
-                                color: 'rgba(255,255,255,0.2)',
-                                fontFamily: "'JetBrains Mono', monospace",
-                                fontSize: '0.52rem',
-                                letterSpacing: '0.08em',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            dismiss
-                        </button>
-                    </div>
-                </Html>
-            )}
+            {/* MazeModeModal is a DOM overlay — see components/game/MazeModeModal.tsx */}
         </group>
     );
-}
+})

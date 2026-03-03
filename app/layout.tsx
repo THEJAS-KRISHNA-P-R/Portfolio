@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google"; // Using proper Next.js names
 import "./globals.css";
-import { AchievementToastContainer } from "@/components/game/AchievementToast";
 import ClientLayout from "./ClientLayout";
 import { getThemeCSSVars } from '@/lib/portfolioTheme';
 
