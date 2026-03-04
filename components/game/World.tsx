@@ -311,8 +311,8 @@ function SceneLights() {
       {profile.tier !== 'low' && (
         <>
           <Stars radius={180} depth={50} count={profile.starCount} factor={3} saturation={0.8} fade speed={0.3} />
-          {/* VISUAL FIX: Environment map — off on low mobile to save perf */}
-          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 128 : 32} />
+          {/* DESKTOP PERF FIX: Environment resolution — three-tier: high=128, mid=64, low=32 */}
+          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 128 : profile.tier === 'mid' ? 64 : 32} />
         </>
       )}
       {/* VISUAL FIX: Fog lightened so far objects aren't invisible */}

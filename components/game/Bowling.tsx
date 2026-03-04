@@ -215,10 +215,10 @@ export const Bowling = memo(function Bowling() {
     const settleUntil = useRef<number>(0);
     // Populated after first render so performance.now() is safe client-side
     useEffect(() => { settleUntil.current = performance.now() + 2500; }, []);
-    const pinNotifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const hasBeenHitRef      = useRef(false);
-    const lastPinActivityRef = useRef(0);
-    const resetScheduledRef  = useRef(false);
+    const pinNotifTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hitFlagRef        = useRef(false);
+    const debounceRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const strikeShownRef    = useRef(false);   // prevents firing game:clear twice
 
     // COL_Y - COL_HY = 0.30 - 0.30 = 0 in local space, so collider bottom is exactly at
     // the RigidBody's world Y. Spawn at 0.005 to avoid exact-zero ground intersection.
@@ -243,21 +243,39 @@ export const Bowling = memo(function Bowling() {
                 pin.setRotation({ x: 0, y: (Math.random() * 0.2 - 0.1), z: 0, w: 1 }, true);
                 pin.sleep();
             });
-            hasBeenHitRef.current     = false;
-            resetScheduledRef.current = false;
             lastPinsDown.current = 0;
             settleUntil.current = performance.now() + 2000;
             setPinsDown(0);
             setShowStrike(false);
+            strikeShownRef.current = false;
             setIsResetting(false);
         }, 50);
     }, [pinWorldPositions]);
 
-    // Called on every pin onCollisionEnter — ONLY marks that pins have been hit
+    // Called on every pin's onCollisionEnter — debounced 5s sliding window
+    // Every new collision cancels + restarts the timer (last hit starts the clock)
     const onPinHit = useCallback(() => {
-        hasBeenHitRef.current      = true;
-        lastPinActivityRef.current = Date.now();
-    }, []);
+        hitFlagRef.current = true;
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            // Score snapshot at reset time — pins have had 5s to settle
+            // Strike was already shown in useFrame; only handle non-strike notification here
+            let finalCount = 0;
+            pinRefs.current.forEach(pin => {
+                if (!pin) return;
+                const rot = pin.rotation();
+                const pos = pin.translation();
+                const tilt = Math.abs(rot.x) + Math.abs(rot.z);
+                if (tilt > 0.52 || pos.y < -0.3) finalCount++;
+            });
+            if (finalCount < 10 && finalCount > 0) {
+                fireAchievement({ type: 'bowling', title: 'PINS DOWN', value: `${finalCount}/10`, subtext: finalCount >= 7 ? '🎳 Great shot!' : finalCount >= 4 ? 'Nice hit!' : 'Keep going!', color: '#ffcc00', duration: 2500 });
+            }
+            hitFlagRef.current  = false;
+            debounceRef.current = null;
+            resetPins();
+        }, 5000);
+    }, [resetPins]);
 
     useEffect(() => {
         const h = () => resetPins();
@@ -274,6 +292,7 @@ export const Bowling = memo(function Bowling() {
         return () => {
             window.removeEventListener('resetBowlingPins', h);
             window.removeEventListener('cheat:auto-strike', onStrike);
+            if (debounceRef.current) clearTimeout(debounceRef.current);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -281,8 +300,7 @@ export const Bowling = memo(function Bowling() {
     useFrame(() => {
         if (isResetting || pinRefs.current.length < 10) return;
         if (performance.now() < settleUntil.current) return;
-
-        // ── HUD counter ──────────────────────────────────────────────────────
+        // HUD counter — and immediate strike detection as soon as all 10 are down
         let fallenCount = 0;
         pinRefs.current.forEach(pin => {
             if (!pin) return;
@@ -295,38 +313,11 @@ export const Bowling = memo(function Bowling() {
             lastPinsDown.current = fallenCount;
             setPinsDown(fallenCount);
         }
-
-        // ── Auto-reset: 5s of stillness after any pin was hit ────────────────
-        if (!hasBeenHitRef.current) return;
-
-        const anyMoving = pinRefs.current.some(ref => {
-            if (!ref) return false;
-            const vel = ref.linvel();
-            return Math.abs(vel.x) + Math.abs(vel.y) + Math.abs(vel.z) > 0.05;
-        });
-
-        if (anyMoving) {
-            lastPinActivityRef.current = Date.now();
-            resetScheduledRef.current  = false;   // pins still active — reset the clock
-        } else if (!resetScheduledRef.current && Date.now() - lastPinActivityRef.current > 5000) {
-            resetScheduledRef.current = true;
-            // Score detection runs here, at the moment all motion has stopped
-            let finalCount = 0;
-            pinRefs.current.forEach(pin => {
-                if (!pin) return;
-                const rot = pin.rotation();
-                const pos = pin.translation();
-                const tilt = Math.abs(rot.x) + Math.abs(rot.z);
-                if (tilt > 0.52 || pos.y < -0.3) finalCount++;
-            });
-            if (finalCount === 10) {
-                setShowStrike(true);
-                window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'bowling' } }));
-            } else if (finalCount > 0) {
-                fireAchievement({ type: 'bowling', title: 'PINS DOWN', value: `${finalCount}/10`, subtext: finalCount >= 7 ? '🎳 Great shot!' : finalCount >= 4 ? 'Nice hit!' : 'Keep going!', color: '#ffcc00', duration: 2500 });
-            }
-            hasBeenHitRef.current = false;
-            resetPins();
+        // Strike: show banner immediately when all 10 fall, don't wait for reset timer
+        if (fallenCount === 10 && !strikeShownRef.current) {
+            strikeShownRef.current = true;
+            setShowStrike(true);
+            window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'bowling' } }));
         }
     });
 

@@ -1,19 +1,23 @@
 import type { QualityTier } from './deviceTier'
 
-// VISUAL FIX: Tier-aware car material — no longer mirror-like
-export const getCarBodyMaterial = (tier: QualityTier) => ({
+// DESKTOP PERF FIX: isMobile now drives separate envMapIntensity paths
+export const getCarBodyMaterial = (tier: QualityTier, isMobile = false) => ({
   metalness:       tier === 'high' ? 0.65  : 0.40,
   roughness:       tier === 'high' ? 0.18  : 0.38,
-  envMapIntensity: tier === 'high' ? 0.45  : tier === 'mid' ? 0.25 : 0.0,
+  // Mobile keeps lower values to avoid IBL cost on GPU-constrained devices
+  // Desktop halved from previous values — was causing mirror-chrome look
+  envMapIntensity: isMobile
+    ? (tier === 'high' ? 0.30 : tier === 'mid' ? 0.15 : 0.0)
+    : (tier === 'high' ? 0.40 : tier === 'mid' ? 0.20 : 0.10),
 })
 
-// VISUAL FIX: Bowling lane floor — matte wood look, not chrome
+// DESKTOP PERF FIX: Near-zero env map on lane — should look like matte wood
 export const getLaneFloorMaterial = () => ({
-  metalness:        0.05,
-  roughness:        0.85,
-  envMapIntensity:  0.12,
+  metalness:        0.04,
+  roughness:        0.88,
+  envMapIntensity:  0.08,
   emissive:         '#112233' as const,
-  emissiveIntensity: 0.12,   // subtle glow instead of mirror shine
+  emissiveIntensity: 0.10,
 })
 
 // VISUAL FIX: Pin material — slightly matte

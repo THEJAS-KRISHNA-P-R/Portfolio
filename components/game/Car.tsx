@@ -539,8 +539,9 @@ function CarBody() {
     const { scene } = useGLTF('/classic_muscle_car.glb');
 
     const cloned = useMemo(() => {
-        // VISUAL FIX: Tier-aware car body material — no longer mirror-like
-        const bodyMat = getCarBodyMaterial(getProfileSync().tier);
+        // DESKTOP PERF FIX: pass isMobile so envMapIntensity is lower on mobile
+        const prof = getProfileSync();
+        const bodyMat = getCarBodyMaterial(prof.tier, prof.isMobile);
 
         const c = scene.clone(true);
         c.traverse((child: any) => {

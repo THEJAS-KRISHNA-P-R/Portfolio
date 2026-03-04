@@ -50,13 +50,13 @@ export function Effects() {
     )
   }
 
-  // Desktop high tier: full stack
+  // Desktop high tier: full stack — reduced N8AO/Bloom intensity vs prev to cut GPU cost
   const caOffset = useMemo(() => new THREE.Vector2(0.0005, 0.0005), [])
   return (
     <Suspense fallback={null}>
       <EffectComposer multisampling={0} enableNormalPass>
-        <N8AO aoRadius={3} intensity={2.5} distanceFalloff={1.2} halfRes quality="performance" />
-        <Bloom mipmapBlur luminanceThreshold={0.85} luminanceSmoothing={0.8} intensity={1.2} height={512} kernelSize={3} />
+        <N8AO aoRadius={3} intensity={1.5} distanceFalloff={1.2} halfRes quality="performance" />
+        <Bloom mipmapBlur luminanceThreshold={0.9} luminanceSmoothing={0.8} intensity={0.8} height={512} kernelSize={3} />
         <ChromaticAberration offset={caOffset} radialModulation={false} modulationOffset={0.5} blendFunction={BlendFunction.NORMAL} />
         <SMAA preset={SMAAPreset.HIGH} edgeDetectionMode={EdgeDetectionMode.COLOR} />
         <Vignette offset={0.2} darkness={0.65} blendFunction={BlendFunction.NORMAL} />

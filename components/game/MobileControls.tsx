@@ -104,68 +104,43 @@ function GameButton({
   )
 }
 
-// ── Fullscreen double-tap TURBO overlay ────────────────────────────────
-// Transparent div covers the screen at z-index 99 (below all control buttons at z 250+).
-// Double-tap anywhere that ISN’T a button activates turbo for 3 seconds.
-function ScreenDoubleTapTurbo() {
-  const lastTapRef     = useRef(0)
-  const boostTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [flash, setFlash] = useState(false)
+// ── Center-zone double-tap TURBO (30–70% width, 20–80% height) ───────────────
+// Invisible zone over the area where the car sits in camera view.
+// Double-tap here activates turbo. No text, no visible UI, no flash.
+function CenterZoneTurbo() {
+  const lastTapRef   = useRef(0)
+  const boostTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const handleTap = (e: React.PointerEvent) => {
-    // Let button presses fall through to the actual button (they’re at higher z-index)
-    // This handler only fires on areas NOT covered by a button
-    const target = e.target as HTMLElement
-    if (target.closest('button')) return
-
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation()
     const now = Date.now()
     if (now - lastTapRef.current < 300) {
       mobileInput.boost = true
-      setFlash(true)
-      if (boostTimerRef.current) clearTimeout(boostTimerRef.current)
-      boostTimerRef.current = setTimeout(() => {
+      if (boostTimer.current) clearTimeout(boostTimer.current)
+      boostTimer.current = setTimeout(() => {
         mobileInput.boost = false
-        setFlash(false)
       }, 3000)
     }
     lastTapRef.current = now
   }
 
-  useEffect(() => () => { if (boostTimerRef.current) clearTimeout(boostTimerRef.current) }, [])
+  useEffect(() => () => { if (boostTimer.current) clearTimeout(boostTimer.current) }, [])
 
   return (
-    <>
-      {/* Invisible fullscreen tap catcher — z:99 so all controls remain on top */}
-      <div
-        onPointerDown={handleTap}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 99,
-          background: 'transparent',
-          pointerEvents: 'auto',
-          touchAction: 'none',
-        }}
-      />
-      {flash && (
-        <div style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: '#FFD700',
-          fontSize: 28,
-          fontWeight: 'bold',
-          fontFamily: 'monospace',
-          letterSpacing: 4,
-          pointerEvents: 'none',
-          zIndex: 300,
-          textShadow: '0 0 20px #FFD700',
-        }}>
-          ⚡ TURBO
-        </div>
-      )}
-    </>
+    <div
+      onPointerDown={handlePointerDown}
+      style={{
+        position:      'fixed',
+        left:          '30%',
+        width:         '40%',
+        top:           '20%',
+        height:        '60%',
+        zIndex:        98,          // below all buttons (z:250) and joystick (z:250)
+        background:    'transparent',
+        pointerEvents: 'auto',
+        touchAction:   'none',
+      }}
+    />
   )
 }
 
@@ -483,7 +458,7 @@ export function MobileControls() {
 
   return (
     <>
-      <ScreenDoubleTapTurbo />
+      <CenterZoneTurbo />
       {isTouch && (
         <button
           onPointerDown={e => { e.preventDefault(); setSettingsOpen(v => !v) }}
