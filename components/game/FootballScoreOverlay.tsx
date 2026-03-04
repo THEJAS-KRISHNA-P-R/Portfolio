@@ -11,11 +11,12 @@ export function FootballScoreOverlay() {
     return (
         <div className="football-score-hud" style={{
             position: 'fixed',
-            top: 'clamp(4rem, 8vh, 5rem)',
-            left: '1rem',
+            bottom: 'clamp(8rem, 15vh, 10rem)',
+            right: '1rem',
             zIndex: 300,
             pointerEvents: 'none',
             fontFamily: "'JetBrains Mono', monospace",
+            textAlign: 'right',
         }}>
             <div style={{
                 background: 'rgba(3,10,6,0.8)',

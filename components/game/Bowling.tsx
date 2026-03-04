@@ -1,7 +1,7 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState, memo } from "react";
-import { RigidBody, CuboidCollider, RapierRigidBody } from "@react-three/rapier";
+import { forwardRef, useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
+import { CapsuleCollider, RigidBody, CuboidCollider, RapierRigidBody } from "@react-three/rapier";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html, useGLTF } from "@react-three/drei";
@@ -27,10 +27,14 @@ const COL_Y  = 0.30;   // collider centre Y (= COL_HY, so base sits at 0)
 
 // Standard 10-pin triangle (relative offsets, Y=0 base)
 const PIN_POSITIONS: [number, number, number][] = [
-    [0,     0,  0],
-    [-0.4,  0, -0.75], [0.4,  0, -0.75],
-    [-0.8,  0, -1.5],  [0,    0, -1.5],  [0.8,  0, -1.5],
-    [-1.2,  0, -2.25], [-0.4, 0, -2.25], [0.4,  0, -2.25], [1.2,  0, -2.25],
+    // Row 1 (closest to car approach)
+    [ 0,    0,  0   ],
+    // Row 2
+    [-0.4,  0, -0.75],  [ 0.4, 0, -0.75],
+    // Row 3
+    [-0.8,  0, -1.5 ],  [ 0,   0, -1.5 ],  [ 0.8, 0, -1.5 ],
+    // Row 4
+    [-1.2,  0, -2.25],  [-0.4, 0, -2.25],  [ 0.4, 0, -2.25],  [ 1.2, 0, -2.25],
 ];
 
 // Single GLB instance, cloned per-pin inside useMemo
@@ -54,19 +58,20 @@ const BowlingPin = forwardRef<RapierRigidBody, { position: [number, number, numb
         <RigidBody
             ref={ref}
             position={position}
-            colliders={false}
-            mass={0.25}
-            // High angular damping keeps pins stable when standing;
-            // a real impact still tips them fully because the force is large.
-            // Low linear damping lets a fallen pin slide/roll into neighbours.
-            linearDamping={0.1}
-            angularDamping={1.8}
-            restitution={0.5}
+            ccd={true}             // ← CRITICAL: pins can tunnel without this
+            mass={0.7}             // lighter = tips easier = more dominos
+            linearDamping={0.15}   // very low — pins slide and roll into each other
+            angularDamping={0.2}   // tips easily
+            restitution={0.45}     // bounces into neighbors
             friction={0.35}
+            colliders={false}
         >
-            {/* Tall narrow box — when the pin tips, the top corner
-                sweeps COL_HY*2 ≈ 0.60 units, reaching the next row at ~0.64 units */}
-            <CuboidCollider args={[COL_HX, COL_HY, COL_HZ]} position={[0, COL_Y, 0]} />
+            {/* CapsuleCollider: radius=0.13, half-height of cylinder portion=0.35 */}
+            {/* Total height = 2*radius + 2*halfHeight = 0.26 + 0.70 = 0.96 ≈ pin body */}
+            <CapsuleCollider
+                args={[0.35, 0.13]}     // [halfHeight of cylinder, radius]
+                position={[0, 0.48, 0]} // centered vertically on pin
+            />
             <PinModel />
         </RigidBody>
     )
@@ -93,10 +98,12 @@ function BowlingLane() {
     return (
         <group>
             {/* ── Main lane surface ── */}
-            <mesh position={[CX, LANE_SURF, LANE_ZC]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[LW, LANE_LEN]} />
-                <meshStandardMaterial color="#c49a3c" roughness={0.22} metalness={0.06} />
-            </mesh>
+            <RigidBody type="fixed" friction={0.05} restitution={0.2}>
+                <mesh position={[CX, LANE_SURF, LANE_ZC]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+                    <planeGeometry args={[LW, LANE_LEN]} />
+                    <meshStandardMaterial color="#c49a3c" roughness={0.22} metalness={0.06} />
+                </mesh>
+            </RigidBody>
 
             {/* ── Oil-pattern centre strip (slightly shinier) ── */}
             <mesh position={[CX, LANE_SURF + 0.001, LANE_ZC]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
@@ -219,7 +226,7 @@ export const Bowling = memo(function Bowling() {
         ]), []
     );
 
-    const resetPins = () => {
+    const resetPins = useCallback(() => {
         if (pinNotifTimer.current) { clearTimeout(pinNotifTimer.current); pinNotifTimer.current = null; }
         if (autoResetTimer.current) { clearTimeout(autoResetTimer.current); autoResetTimer.current = null; }
         setIsResetting(true);
@@ -230,15 +237,17 @@ export const Bowling = memo(function Bowling() {
                 pin.setTranslation({ x: wx, y: wy, z: wz }, true);
                 pin.setLinvel({ x: 0, y: 0, z: 0 }, true);
                 pin.setAngvel({ x: 0, y: 0, z: 0 }, true);
-                pin.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+                pin.setRotation({ x: 0, y: (Math.random() * 0.2 - 0.1), z: 0, w: 1 }, true);
+                pin.sleep();
             });
             firstHitTime.current = null;
             lastPinsDown.current = 0;
-            settleUntil.current = performance.now() + 2000; // wait 2 s for physics to settle
+            settleUntil.current = performance.now() + 2000;
             setPinsDown(0);
+            setShowStrike(false);
             setIsResetting(false);
         }, 50);
-    };
+    }, [pinWorldPositions]);
 
     useEffect(() => {
         const h = () => resetPins();
@@ -272,11 +281,21 @@ export const Bowling = memo(function Bowling() {
         pinRefs.current.forEach(pin => {
             if (!pin) return;
             const rot = pin.rotation();
-            const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w));
-            // 0.75 rad ≈ 43° — ignores small settling wobbles, catches genuinely tipped pins
-            if (Math.abs(euler.x) + Math.abs(euler.z) > 0.75) fallenCount++;
+            const pos = pin.translation();
+            const tilt = Math.abs(rot.x) + Math.abs(rot.z);
+            // A pin is fallen if:
+            // 1. Significantly tilted (>30°), OR
+            // 2. Its Y position has dropped (fell off lane)
+            const isFallen = tilt > 0.52 || pos.y < -0.3
+            if (isFallen) fallenCount++;
         });
-        if (fallenCount > 0 && !firstHitTime.current) firstHitTime.current = performance.now();
+        if (fallenCount > 0 && !firstHitTime.current) {
+            firstHitTime.current = performance.now();
+            // ── NEW: Auto-reset timer ──
+            // Reset all pins 5 seconds after the VERY FIRST pin is hit
+            if (autoResetTimer.current) clearTimeout(autoResetTimer.current);
+            autoResetTimer.current = setTimeout(resetPins, 5000);
+        }
         if (fallenCount !== lastPinsDown.current) {
             lastPinsDown.current = fallenCount;
             setPinsDown(fallenCount);

@@ -1,11 +1,16 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { useQualityStore } from "@/store/useQualityStore"
 
 export function MazeHUDOverlay() {
+    const isGameMode = usePortfolioStore(s => s.isGameMode)
+    const mazeRunning = usePortfolioStore(s => s.mazeRunning)
+    const setMazeRunning = usePortfolioStore(s => s.setMazeRunning)
+    const profile = useQualityStore(s => s.profile)
     const [wallHits, setWallHits] = useState<number>(0)
     const [mazeMode, setMazeMode] = useState<'reset' | 'counter' | null>(null)
-    const [mazeRunning, setMazeRunning] = useState(false)
     const [elapsedDisplay, setElapsedDisplay] = useState('0.0s')
     const mazeStartTime = useRef(0)
 
@@ -48,7 +53,7 @@ export function MazeHUDOverlay() {
             window.removeEventListener('maze:reset', onMazeReset)
             window.removeEventListener('maze:exited', onMazeExited)
         }
-    }, [])
+    }, [setMazeRunning])
 
     useEffect(() => {
         if (!mazeRunning) return
@@ -96,29 +101,64 @@ export function MazeHUDOverlay() {
                         {elapsedDisplay}
                     </span>
                 </div>
-                {/* Exit Maze button below timer */}
-                <div style={{ marginTop: '0.3rem', pointerEvents: 'all' }}>
-                    <button
-                        onClick={() => window.dispatchEvent(new CustomEvent('maze:exit'))}
-                        style={{
-                            background: 'rgba(0,10,26,0.7)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '6px',
-                            padding: '0.15rem 0.55rem',
-                            color: 'rgba(255,255,255,0.3)',
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '0.45rem',
-                            letterSpacing: '0.1em',
-                            cursor: 'pointer',
-                            backdropFilter: 'blur(8px)',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#ff5555'; e.currentTarget.style.borderColor = 'rgba(255,85,85,0.4)' }}
-                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
-                    >
-                        ✕ EXIT MAZE
-                    </button>
-                </div>
             </div>
+
+            {/* ── EXIT MAZE button (FIX 2) ── */}
+            {mazeRunning && (
+                <button
+                    onClick={() => {
+                        window.dispatchEvent(new CustomEvent('maze:force-exit'))
+                        // Teleport to a safe location AWAY from the maze entrance trigger
+                        // The maze entrance is at roughly [-110, 0, 110]
+                        // Let's teleport back to the world spawn [0, 1.5, 0]
+                        window.dispatchEvent(new CustomEvent('car:teleport', {
+                            detail: { x: 0, y: 1.5, z: 0, rotationY: 0 }
+                        }))
+                    }}
+                    style={{
+                        position: 'fixed',
+                        top: 'clamp(5.8rem, 10.5vh, 7rem)',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 310,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 'clamp(0.45rem, 1.2vw, 0.55rem)',
+                        fontWeight: 700,
+                        letterSpacing: '0.14em',
+                        color: 'rgba(255,255,255,0.5)',
+                        background: 'rgba(3,10,6,0.75)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '20px',
+                        padding: '0.3rem 0.85rem',
+                        cursor: 'pointer',
+                        backdropFilter: 'blur(8px)',
+                        WebkitBackdropFilter: 'blur(8px)',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    ✕ EXIT MAZE
+                </button>
+            )}
+
+            {/* ── PERFORMANCE MODE indicator ── */}
+
+            {/* ── PERFORMANCE MODE indicator ── */}
+            {profile?.tier === 'low' && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '0.4rem',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 200,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.42rem',
+                    color: 'rgba(255,180,0,0.4)',
+                    letterSpacing: '0.14em',
+                    pointerEvents: 'none',
+                }}>
+                    PERFORMANCE MODE
+                </div>
+            )}
 
             {/* ── BOTTOM LEFT: Wall hits (counter mode) ── */}
             {mazeMode === 'counter' && mazeRunning && (

@@ -1,6 +1,4 @@
-"use client";
-
-import React, { Suspense, useEffect, memo } from "react";
+import React, { Suspense, useEffect, memo, useState } from "react";
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 import { AdaptiveEvents, PerformanceMonitor, KeyboardControls, Environment, Stars, Instances, Instance } from "@react-three/drei";
@@ -13,10 +11,22 @@ import { ZONES_ARRAY } from "@/lib/constants";
 import { TriggerZone } from "./TriggerZone";
 import { SpinningText, Aurora } from "../ui";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
+import { getDeviceProfile } from "@/lib/deviceTier";
+import { useQualityStore } from "@/store/useQualityStore";
+import { GameLoadingScreen } from "./GameLoadingScreen";
+import { Effects } from "./Effects";
+
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
 const Maze = React.lazy(() => import("./Maze").then(mod => ({ default: mod.Maze })));
 
-// Key mappings
+function FrameloopManager() {
+    const { setFrameloop } = useThree()
+    const isGameMode = usePortfolioStore(s => s.isGameMode)
+    useEffect(() => {
+        setFrameloop(isGameMode ? 'always' : 'demand')
+    }, [isGameMode, setFrameloop])
+    return null
+}
 const keyboardMap = [
     { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
     { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
@@ -56,14 +66,26 @@ function WorldEnvironment() {
         [90, 0, -60], [-90, 0, 60],
     ]
 
-    // Rocks — scattered between trees
-    const ROCK_POSITIONS: [number, number, number][] = [
-        [22, 0, 15], [-15, 0, -20], [40, 0, 10],
-        [-35, 0, 45], [60, 0, -20], [-55, 0, 30],
-        [10, 0, 50], [-10, 0, -55], [75, 0, 20],
-    ]
+// Rocks — scattered between trees
+const ROCK_POSITIONS: [number, number, number][] = [
+    [22, 0, 15], [-15, 0, -20], [40, 0, 10],
+    [-35, 0, 45], [60, 0, -20], [-55, 0, 30],
+    [10, 0, 50], [-10, 0, -55], [75, 0, 20],
+]
 
-    // Lamp posts — along the roads
+function SolidRock({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
+    return (
+        <RigidBody type="fixed" colliders={false} position={position}>
+            <CuboidCollider args={[0.55 * scale, 0.3 * scale, 0.5 * scale]} />
+            <mesh castShadow scale={scale}>
+                <dodecahedronGeometry args={[0.6, 0]} />
+                <meshStandardMaterial color="#1a2a20" roughness={0.9} />
+            </mesh>
+        </RigidBody>
+    )
+}
+
+// Lamp posts — along the roads
     const LAMP_POSITIONS: [number, number, number][] = [
         [4, 0, 20], [-4, 0, 20],
         [4, 0, -20], [-4, 0, -20],
@@ -127,15 +149,11 @@ function WorldEnvironment() {
                 {TREE_POSITIONS.map((pos, i) => <Instance key={`foliage2-${i}`} position={[pos[0], pos[1] + 2.9, pos[2]]} />)}
             </Instances>
 
-            {/* INSTANCED ROCKS */}
-            <Instances castShadow limit={50}>
-                <dodecahedronGeometry args={[0.6, 0]} />
-                <meshStandardMaterial color="#1a2a20" roughness={0.9} metalness={0.1} />
-                {ROCK_POSITIONS.map((pos, i) => {
-                    const pseudoScale = 0.8 + Math.abs(Math.sin(i)) * 0.6;
-                    return <Instance key={`rock-${i}`} position={pos} scale={pseudoScale} />
-                })}
-            </Instances>
+            {/* SOLID ROCKS (FIXED COLLIDERS) */}
+            {ROCK_POSITIONS.map((pos, i) => {
+                const pseudoScale = 0.8 + Math.abs(Math.sin(i)) * 0.6;
+                return <SolidRock key={`rock-${i}`} position={pos} scale={pseudoScale} />
+            })}
 
             {/* INSTANCED LAMP POSTS */}
             <Instances castShadow limit={50}>
@@ -218,55 +236,127 @@ function WorldEnvironment() {
     )
 }
 
-function FrameloopManager() {
-    const { setFrameloop } = useThree()
-    const isGameMode = usePortfolioStore(s => s.isGameMode)
-    useEffect(() => {
-        setFrameloop(isGameMode ? 'always' : 'demand')
-    }, [isGameMode, setFrameloop])
-    return null
+function GameCanvas({ children }: { children: React.ReactNode }) {
+  const profile = useQualityStore(s => s.profile)!
+  const [dpr, setDpr] = useState(profile.dpr)
+
+  return (
+    <Canvas
+      dpr={dpr}
+      shadows={profile.shadows}
+      gl={{
+        antialias:           false,
+        powerPreference:     'high-performance',
+        stencil:             false,
+        alpha:               false,
+        toneMapping:         THREE.ACESFilmicToneMapping,
+        toneMappingExposure: profile.tier === 'low' ? 1.0 : 1.1,
+        outputColorSpace:    THREE.SRGBColorSpace,
+      }}
+      onCreated={({ gl }) => {
+        gl.shadowMap.enabled = profile.shadows
+        gl.shadowMap.type    = profile.shadows
+          ? THREE.PCFSoftShadowMap
+          : THREE.BasicShadowMap
+      }}
+      camera={{ position: [0, 8, 12], fov: 58, near: 0.3, far: profile.tier === 'low' ? 150 : 300 }}
+      performance={{ min: 0.4 }}
+    >
+      <AdaptiveEvents />
+      <PerformanceMonitor
+        bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
+        onDecline={() => setDpr(d => {
+          const minDPR = profile.isMobile ? 0.5 : 1.0;
+          return Math.max(minDPR, d - 0.1);
+        })}
+        onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
+        onFallback={() => setDpr(profile.isMobile ? 0.5 : 1.0)}
+      />
+      <FrameloopManager />
+      {children}
+    </Canvas>
+  )
+}
+
+function SceneLights() {
+  const profile = useQualityStore(s => s.profile)!
+
+  return (
+    <>
+      <directionalLight
+        position={[40, 60, 20]}
+        intensity={1.8}
+        color="#c8e8ff"
+        castShadow={profile.shadows}
+        shadow-mapSize={[profile.shadowMapSize, profile.shadowMapSize]}
+        shadow-camera-near={1}
+        shadow-camera-far={profile.tier === 'high' ? 120 : 80}
+        shadow-camera-left={-60}  shadow-camera-right={60}
+        shadow-camera-top={60}    shadow-camera-bottom={-60}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.02}
+      />
+      <directionalLight position={[-30, 8, 40]} intensity={0.35} color="#ff9944" castShadow={false} />
+      {profile.tier !== 'low' && (
+        <directionalLight position={[-20, 15, -60]} intensity={0.5} color="#66aaff" castShadow={false} />
+      )}
+      <ambientLight intensity={profile.tier === 'low' ? 0.55 : 0.18} color="#102030" />
+      <hemisphereLight args={['#1a3a6a', '#0a1a10', 0.6]} />
+      {profile.tier !== 'low' && (
+        <>
+          <Stars radius={180} depth={50} count={profile.starCount} factor={3} saturation={0.8} fade speed={0.3} />
+          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 256 : 64} />
+        </>
+      )}
+      {profile.fog && <fog attach="fog" args={['#0a0a0f', 55, 130]} />}
+    </>
+  )
+}
+
+function AdaptivePhysics({ children }: { children: React.ReactNode }) {
+  const profile = useQualityStore(s => s.profile)!
+
+  return (
+    <Physics
+      gravity={[0, -9.81, 0]}
+      timeStep={1 / profile.physicsHz}
+      interpolate
+      colliders={false}
+    >
+      {children}
+    </Physics>
+  )
 }
 
 export function World() {
+  const setProfile = useQualityStore(s => s.setProfile)
+  const profile = useQualityStore(s => s.profile)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    getDeviceProfile().then(p => {
+      setProfile(p)
+      setReady(true)
+    })
+  }, [setProfile])
+
+  if (!ready || !profile) return <GameLoadingScreen progress={0} message="Detecting device..." />
+
+  return <GameWorld />
+}
+
+function GameWorld() {
     return (
         <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none', zIndex: 1 }}>
             <Suspense fallback={<WorldFallback />}>
                 <KeyboardControls map={keyboardMap}>
-                    <Canvas
-                        style={{ touchAction: 'none' }}
-                        camera={{ position: [0, 8, 12], fov: 50 }}
-                        shadows
-                        gl={{ shadowMapType: THREE.PCFSoftShadowMap, antialias: true, powerPreference: 'high-performance' } as any}
-                        dpr={[1, 1.5]}
-                    >
-                        {/* Performance */}
-                        <AdaptiveEvents />
-                        <PerformanceMonitor />
-                        <FrameloopManager />
-
+                    <GameCanvas>
                         {/* Scene */}
-                        <ambientLight intensity={0.6} />
-                        <directionalLight
-                            position={[10, 20, 10]}
-                            intensity={1.2}
-                            castShadow
-                            shadow-mapSize={[2048, 2048]}
-                            shadow-camera-left={-60}
-                            shadow-camera-right={60}
-                            shadow-camera-top={60}
-                            shadow-camera-bottom={-60}
-                        />
-                        <Environment preset="sunset" />
-                        <Stars radius={80} depth={50} count={3000} factor={4} fade />
-                        <fog attach="fog" args={['#0a0a0f', 55, 130]} />
+                        <SceneLights />
+                        <Effects />
 
                         {/* Physics */}
-                        <Physics
-                            gravity={[0, -9.81, 0]}
-                            timeStep={1/60}
-                            interpolate
-                            colliders={false}
-                        >
+                        <AdaptivePhysics>
                             {/* Ground first — synchronous */}
                             <WorldEnvironment />
 
@@ -280,8 +370,8 @@ export function World() {
 
                             {/* Corner Games & Ramp (Lazy Loaded) */}
                             <Suspense fallback={null}>
-                                <Bowling />
-                                <Maze />
+                                <BowlingZones />
+                                <MazeZone />
                             </Suspense>
 
                             {/* Trigger Zones */}
@@ -294,10 +384,40 @@ export function World() {
                                     label={zone.label}
                                 />
                             ))}
-                        </Physics>
-                    </Canvas>
+                        </AdaptivePhysics>
+                    </GameCanvas>
                 </KeyboardControls>
             </Suspense>
         </div>
     );
+}
+
+const BowlingZones = () => {
+    const profile = useQualityStore(s => s.profile)!
+    const carPos = usePortfolioStore(s => s.carPos)
+    const dist = (wx: number, wz: number) =>
+        Math.sqrt((carPos.x - wx) ** 2 + (carPos.z - wz) ** 2)
+    const shouldRender = (wx: number, wz: number) =>
+        !profile.lazyLoadZones || dist(wx, wz) < 100
+
+    return shouldRender(-45, -45) ? (
+        <Suspense fallback={null}>
+            <Bowling />
+        </Suspense>
+    ) : null
+}
+
+const MazeZone = () => {
+    const profile = useQualityStore(s => s.profile)!
+    const carPos = usePortfolioStore(s => s.carPos)
+    const dist = (wx: number, wz: number) =>
+        Math.sqrt((carPos.x - wx) ** 2 + (carPos.z - wz) ** 2)
+    const shouldRender = (wx: number, wz: number) =>
+        !profile.lazyLoadZones || dist(wx, wz) < 100
+
+    return shouldRender(-110, 110) ? (
+        <Suspense fallback={null}>
+            <Maze />
+        </Suspense>
+    ) : null
 }

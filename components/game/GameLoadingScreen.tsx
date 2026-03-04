@@ -5,24 +5,29 @@ import { CommitsGrid } from "@/components/ui/commits-grid"
 
 interface GameLoadingScreenProps {
     onComplete?: () => void
+    progress?: number
+    message?: string
 }
 
-export function GameLoadingScreen({ onComplete }: GameLoadingScreenProps) {
-    const [progress, setProgress] = useState(0)
+export function GameLoadingScreen({ onComplete, progress: externalProgress, message: externalMessage }: GameLoadingScreenProps) {
+    const [internalProgress, setInternalProgress] = useState(0)
     const [phase, setPhase] = useState<'loading' | 'ready' | 'launching'>('loading')
     const [opacity, setOpacity] = useState(1)
     const [scanY, setScanY] = useState(0)
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const animRef = useRef<number>(0)
 
+    const progress = externalProgress !== undefined ? externalProgress : internalProgress
+
     // ── Simulate loading progress ────────────────────────────────────────────
     useEffect(() => {
+        if (externalProgress !== undefined) return
         let p = 0
         const interval = setInterval(() => {
             // Non-linear progress: fast then slows near 100
             const increment = p < 60 ? 2.2 : p < 85 ? 1.1 : p < 95 ? 0.4 : 0.15
             p = Math.min(100, p + increment)
-            setProgress(Math.round(p))
+            setInternalProgress(Math.round(p))
             if (p >= 100) {
                 clearInterval(interval)
                 setTimeout(() => setPhase('ready'), 300)
@@ -226,7 +231,17 @@ export function GameLoadingScreen({ onComplete }: GameLoadingScreenProps) {
                             justifyContent: 'space-between',
                             alignItems: 'center',
                         }}>
-                            <LoadingStatus progress={progress} />
+                            {externalMessage ? (
+                                <span style={{
+                                    fontSize: '0.6rem',
+                                    color: 'rgba(255,255,255,0.3)',
+                                    letterSpacing: '0.06em',
+                                }}>
+                                    {externalMessage}
+                                </span>
+                            ) : (
+                                <LoadingStatus progress={progress} />
+                            )}
                             <span style={{
                                 fontSize: '0.65rem',
                                 color: '#00e676',

@@ -30,6 +30,8 @@ interface PortfolioStore {
     setCarSpeed: (speed: number) => void;
     teleportTarget: Vector3Tuple | null;
     setTeleportTarget: (pos: Vector3Tuple | null) => void;
+    carPos: { x: number; y: number; z: number };
+    setCarPos: (pos: { x: number; y: number; z: number }) => void;
     turboCharge: number;
     setTurboCharge: (v: number) => void;
     mobileTurbo: boolean;
@@ -43,6 +45,10 @@ interface PortfolioStore {
     footballScore: number;
     footballHighScore: number;
     setFootballScore: (n: number) => void;
+
+    // Maze state
+    mazeRunning: boolean;
+    setMazeRunning: (val: boolean) => void;
 
     // Projects (persisted)
     projects: Project[];
@@ -133,6 +139,9 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
     teleportTarget: null,
     setTeleportTarget: (pos) => set({ teleportTarget: pos }),
 
+    carPos: { x: 0, y: 0, z: 0 },
+    setCarPos: (pos) => set({ carPos: pos }),
+
     turboCharge: 100,
     setTurboCharge: (v) => set({ turboCharge: v }),
 
@@ -153,6 +162,9 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
         footballScore: n,
         footballHighScore: Math.max(n, s.footballHighScore),
     })),
+
+    mazeRunning: false,
+    setMazeRunning: (val) => set({ mazeRunning: val }),
 
     // Persisted initial state
     projects: initialProjects,

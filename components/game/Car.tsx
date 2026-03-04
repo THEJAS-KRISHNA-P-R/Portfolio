@@ -86,53 +86,71 @@ export function Car() {
         return () => clearTimeout(t);
     }, []);
 
-    // Teleport
-    useEffect(() => {
-        if (!teleportTarget || !carRef.current) return;
-        const b = carRef.current;
-        b.setTranslation({ x: teleportTarget[0], y: 2, z: teleportTarget[2] }, true);
-        b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-        currentSpeed.current = 0;
-        setTeleportTarget(null);
-    }, [teleportTarget, setTeleportTarget]);
+    const controlsFrozen = useRef(false);
 
-    // Maze flag — block R key while inside maze
     useEffect(() => {
-        const onEnter = () => { _inMaze = true }
-        const onLeave = () => { _inMaze = false }
-        window.addEventListener('maze:mode-active', onEnter)
-        window.addEventListener('maze:exited', onLeave)
-        window.addEventListener('maze:cleared', onLeave)
-        return () => {
-            window.removeEventListener('maze:mode-active', onEnter)
-            window.removeEventListener('maze:exited', onLeave)
-            window.removeEventListener('maze:cleared', onLeave)
-        }
-    }, [])
+        const handler = (e: Event) => {
+            const { x, y, z, rotationY } = (e as CustomEvent<{
+                x: number; y: number; z: number; rotationY: number
+            }>).detail;
 
-    // Cheat code handlers
+            const body = carRef.current;
+            if (!body) return;
+
+            // 1. Zero out velocity first
+            body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+            // 2. Set position
+            body.setTranslation({ x, y, z }, true);
+
+            // 3. Set rotation as quaternion
+            const halfAngle = rotationY / 2;
+            body.setRotation(
+                { x: 0, y: Math.sin(halfAngle), z: 0, w: Math.cos(halfAngle) },
+                true
+            );
+            
+            // Sync internal yaw state
+            yaw.current = rotationY;
+
+            // 4. Reset internal speed states
+            currentSpeed.current = 0;
+            forwardDriveTime.current = 0;
+        };
+
+        window.addEventListener('car:teleport', handler);
+        return () => window.removeEventListener('car:teleport', handler);
+    }, []);
+
     useEffect(() => {
-        const onBoost = () => {
-            _infiniteBoost = !_infiniteBoost
-        }
-        const onMoon = () => {
-            const isMoon = Math.abs((world.gravity as unknown as { x: number; y: number; z: number }).y + 1.96) < 0.1
-            ;(world.gravity as unknown as { x: number; y: number; z: number }).y = isMoon ? -9.81 : -1.96
-        }
-        const onSpeed = () => {
-            _maxSpeedActive = true
-            _maxSpeedTimer = 30
-        }
-        window.addEventListener('cheat:infinite-boost', onBoost)
-        window.addEventListener('cheat:moon-gravity', onMoon)
-        window.addEventListener('cheat:max-speed', onSpeed)
+        const onReset = () => {
+            const body = carRef.current;
+            if (!body) return;
+            const pos = body.translation();
+            const rot = body.rotation();
+            const currentY = 2 * Math.atan2(rot.y, rot.w);
+            
+            window.dispatchEvent(new CustomEvent('car:teleport', {
+                detail: { x: pos.x, y: pos.y + 2.5, z: pos.z, rotationY: currentY }
+            }));
+        };
+        window.addEventListener('car:reset', onReset);
+
+        const onFreeze = (e: Event) => {
+            controlsFrozen.current = (e as CustomEvent).detail.frozen;
+            if (controlsFrozen.current && carRef.current) {
+                carRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                carRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            }
+        };
+        window.addEventListener('game:freeze-controls', onFreeze);
+
         return () => {
-            window.removeEventListener('cheat:infinite-boost', onBoost)
-            window.removeEventListener('cheat:moon-gravity', onMoon)
-            window.removeEventListener('cheat:max-speed', onSpeed)
+            window.removeEventListener('car:reset', onReset);
+            window.removeEventListener('game:freeze-controls', onFreeze);
         }
-    }, [world])
+    }, []);
 
     useFrame((state, delta) => {
         const body = carRef.current;
@@ -147,6 +165,12 @@ export function Car() {
         }
 
         const dt = Math.min(delta, 0.05);
+
+        if (controlsFrozen.current) {
+            currentSpeed.current = 0;
+            forwardDriveTime.current = 0;
+            return;
+        }
 
         // ── Spawn cinematic ──────────────────────────────────────────────
         if (spawning.current) {
@@ -379,6 +403,9 @@ export function Car() {
         gameState.speed = Math.abs(currentSpeed.current);
         gameState.turboCharge = boostCharge.current;
 
+        // Update car position in store for lazy loading
+        usePortfolioStore.getState().setCarPos({ x: pos.x, y: pos.y, z: pos.z });
+
         // ── Fall recovery / Manual Reset ────────────────────────────────────────────────
         if (pos.y < -2 || (keys.reset && !_inMaze)) {
             // If manual reset (keys.reset), pop them UP slightly from their current XZ so they don't fall forever if stuck
@@ -398,9 +425,10 @@ export function Car() {
                 ref={carRef}
                 userData={{ isCar: true }}
                 colliders={false}
-                mass={80}
-                linearDamping={0.4}
-                angularDamping={20}          // very high — we control rotation ourselves
+                ccd={true}
+                mass={45}
+                linearDamping={0.3}
+                angularDamping={1.2}
                 enabledRotations={[false, true, false]}
                 friction={1.0}
                 position={[0, 2, -5]}

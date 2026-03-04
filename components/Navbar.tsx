@@ -17,11 +17,15 @@ export function Navbar() {
   // Don't render navbar inside game world
   if (isGameMode) return null
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname?.startsWith(href) ?? false
+  const isActive = (href: string) => {
+    if (href.startsWith("/#")) {
+      const hash = href.substring(1);
+      return typeof window !== "undefined" && window.location.hash === hash;
+    }
+    return href === "/" ? pathname === "/" : pathname?.startsWith(href) ?? false;
+  };
 
   const navLinks = [
-    { label: "Portfolio", href: "/" },
     { label: "About",     href: "/#about" },
     { label: "Projects",  href: "/#projects" },
     { label: "Contact",   href: "/#contact" },
@@ -52,7 +56,16 @@ export function Navbar() {
         >
           <div className="flex items-center justify-between w-full px-5 gap-3">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0">
+            <Link 
+              href="/" 
+              onClick={(e) => {
+                if (pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className="flex items-center gap-2 shrink-0"
+            >
               <span className="text-sm font-bold tracking-widest text-[#00e676]">
                 TKPR
               </span>
@@ -64,6 +77,22 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => {
+                    if (pathname === "/" && item.href.startsWith("/#")) {
+                      e.preventDefault();
+                      const id = item.href.replace("/#", "");
+                      const el = document.getElementById(id);
+                      if (el) {
+                        const offset = 80;
+                        const bodyRect = document.body.getBoundingClientRect().top;
+                        const elementRect = el.getBoundingClientRect().top;
+                        const elementPosition = elementRect - bodyRect;
+                        const offsetPosition = elementPosition - offset;
+                        window.scrollTo({ top: offsetPosition, behavior: "smooth" });
+                        window.history.pushState(null, "", item.href);
+                      }
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
                     isActive(item.href)
                       ? "text-[#00e676] bg-[#00e676]/10"
@@ -112,7 +141,17 @@ export function Navbar() {
           className="w-full glass-surface-fixed"
         >
           <div className="flex items-center w-full px-4 gap-2">
-            <Link href="/" className="text-sm font-bold tracking-widest text-[#00e676] shrink-0">
+            {/* Logo */}
+            <Link 
+              href="/" 
+              onClick={(e) => {
+                if (pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className="text-sm font-bold tracking-widest text-[#00e676] shrink-0"
+            >
               TKPR
             </Link>
             <div className="flex-1" />
@@ -155,7 +194,23 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={(e) => {
+                    setIsMenuOpen(false);
+                    if (pathname === "/" && item.href.startsWith("/#")) {
+                      e.preventDefault();
+                      const id = item.href.replace("/#", "");
+                      const el = document.getElementById(id);
+                      if (el) {
+                        const offset = 70;
+                        const bodyRect = document.body.getBoundingClientRect().top;
+                        const elementRect = el.getBoundingClientRect().top;
+                        const elementPosition = elementRect - bodyRect;
+                        const offsetPosition = elementPosition - offset;
+                        window.scrollTo({ top: offsetPosition, behavior: "smooth" });
+                        window.history.pushState(null, "", item.href);
+                      }
+                    }
+                  }}
                   className="block px-5 py-3.5 text-sm text-white/70 hover:text-white hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 font-mono tracking-wide transition-colors"
                 >
                   {item.label}

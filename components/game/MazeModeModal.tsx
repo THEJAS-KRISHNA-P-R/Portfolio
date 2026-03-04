@@ -12,7 +12,14 @@ export function MazeModeModal() {
 
   const select = (mode: 'reset' | 'counter') => {
     window.dispatchEvent(new CustomEvent('maze:mode-selected', { detail: { mode } }))
+    window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
     setVisible(false)
+  }
+
+  const handleClose = () => {
+    setVisible(false)
+    window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
+    window.dispatchEvent(new CustomEvent('maze:dismissed'))
   }
 
   if (!visible) return null
@@ -35,6 +42,26 @@ export function MazeModeModal() {
         boxShadow: '0 0 60px rgba(0,191,255,0.1), 0 20px 60px rgba(0,0,0,0.7)',
         backdropFilter: 'blur(24px)',
       }}>
+        <button
+          onClick={handleClose}
+          style={{
+            position: 'absolute',
+            top: '0.6rem',
+            right: '0.7rem',
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255,255,255,0.3)',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            lineHeight: 1,
+            padding: '0.2rem',
+            fontFamily: 'inherit',
+          }}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.2rem' }}>
           <div style={{ fontSize: 'clamp(0.5rem,1.5vw,0.6rem)', color: 'rgba(0,191,255,0.5)', letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
@@ -92,7 +119,7 @@ export function MazeModeModal() {
           </button>
         </div>
 
-        <button onClick={() => setVisible(false)} style={{
+        <button onClick={handleClose} style={{
           marginTop: '0.8rem', width: '100%', padding: '0.3rem',
           background: 'none', border: 'none',
           color: 'rgba(255,255,255,0.2)', fontFamily: 'inherit',

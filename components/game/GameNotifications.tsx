@@ -156,8 +156,11 @@ export function GameNotifContainer() {
     const handler = (e: Event) => {
       const d = (e as CustomEvent<GameNotifData>).detail
       _nextId++
-      // Max 3 toasts, drop oldest
-      setToasts(p => [...p.slice(-2), { ...d, id: _nextId }])
+      setToasts(p => {
+        // Remove any existing toast of same type before adding new one
+        const filtered = p.filter(t => t.type !== d.type)
+        return [...filtered.slice(-1), { ...d, id: _nextId }]
+      })
     }
     window.addEventListener('game:achievement', handler)
     return () => window.removeEventListener('game:achievement', handler)

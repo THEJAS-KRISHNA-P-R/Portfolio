@@ -21,7 +21,11 @@ export function GoalPost() {
     const highScore = useRef(0)
     const setFootballScore = usePortfolioStore(s => s.setFootballScore)
 
+    const goalCooldown = useRef(false);
+
     const handleGoal = (event: any) => {
+        if (goalCooldown.current) return;
+
         // Try rigidBodyObject first, fall back to collider parent
         const obj = event.other?.rigidBodyObject ?? event.other?.collider?.parent?.();
         if (!obj?.userData?.isBall) return;   // reject car and everything else
@@ -33,15 +37,15 @@ export function GoalPost() {
         const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
         if (speed < 1.5) return;  // too slow — not a real shot
 
+        goalCooldown.current = true;
+        setTimeout(() => { goalCooldown.current = false; }, 3000); // 3s cooldown
+
         const scoreValue = Math.round(speed * 10);
         const currentHigh = highScore.current;
         setFootballScore(scoreValue);
 
         if (scoreValue > currentHigh) {
             highScore.current = scoreValue;
-            setDisplayScore({ value: scoreValue, isHighScore: true });
-            setShowScore(true);
-            setTimeout(() => { setShowScore(false); setDisplayScore(null); }, 4000);
             fireAchievement({
                 type: 'football',
                 title: 'GOAL!',
@@ -61,9 +65,6 @@ export function GoalPost() {
             });
             window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: true, value: `${scoreValue} pts` } }));
         } else {
-            setDisplayScore({ value: scoreValue, isHighScore: false });
-            setShowScore(true);
-            setTimeout(() => { setShowScore(false); setDisplayScore(null); }, 2000);
             fireAchievement({
                 type: 'football',
                 title: 'GOAL!',
@@ -259,58 +260,7 @@ export function GoalPost() {
                 />
             </RigidBody>
 
-            {/* Score display above the goal: */}
-            <Html position={[0, POST_HEIGHT + 2.5, 0]} center distanceFactor={14} transform>
-                <div className="flex flex-col items-center gap-1 pointer-events-none">
-
-                    {/* Always show high score */}
-                    {highScore.current > 0 && (
-                        <div
-                            className="px-4 py-1.5 rounded-full font-mono text-xs font-bold"
-                            style={{
-                                background: 'rgba(245,200,66,0.15)',
-                                border: '1px solid rgba(245,200,66,0.4)',
-                                color: '#f5c842',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            🏆 BEST: {highScore.current} pts
-                        </div>
-                    )}
-
-                    {/* Current shot score — appears and fades */}
-                    {showScore && displayScore && (
-                        <div
-                            className="px-4 py-2 rounded-full font-mono font-bold text-sm"
-                            style={{
-                                background: displayScore.isHighScore ? 'rgba(245,200,66,0.25)' : 'rgba(255,255,255,0.1)',
-                                border: `1px solid ${displayScore.isHighScore ? 'rgba(245,200,66,0.6)' : 'rgba(255,255,255,0.2)'}`,
-                                color: displayScore.isHighScore ? '#f5c842' : '#ffffff',
-                                whiteSpace: 'nowrap',
-                                animation: 'scorePopIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                            }}
-                        >
-                            {displayScore.isHighScore ? '🎉 NEW BEST! ' : ''}{displayScore.value} pts
-                        </div>
-                    )}
-
-                    {/* Static label when no score */}
-                    {!showScore && highScore.current === 0 && (
-                        <div
-                            className="px-3 py-1 rounded-full font-mono text-[10px]"
-                            style={{
-                                background: 'rgba(0,0,0,0.5)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#5a8a6a',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            ⚽ Hit the ball into the net!
-                        </div>
-                    )}
-
-                </div>
-            </Html>
+            {/* Score display removed — handled by DOM toasts */}
         </group>
     );
 }

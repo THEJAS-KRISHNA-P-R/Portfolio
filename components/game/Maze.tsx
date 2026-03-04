@@ -7,16 +7,26 @@ import { fireAchievement } from "./AchievementToast";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import * as THREE from "three";
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const MAZE_POS: [number, number, number] = [-110, 0, 110];
-const MAZE_SIZE = 28;        // total outer square side length
-const HALF = MAZE_SIZE / 2;  // 14
-const WALL_H = 3.0;
-const T = 0.6;       // wall thickness (half = 0.3)
-const HT = T / 2;
+// ── Module-level constants ────────────────────────────────────────────────
+const MAZE_POS = new THREE.Vector3(-110, 0, 110);
+const MAZE_ROT = Math.PI * 0.75; // same as group rotation
 
-// Car spawn: outside south entrance, facing north into maze
-const SPAWN_REL: [number, number, number] = [0, 1.5, HALF + 4];
+const C  = 4;    // cell size
+const T  = 0.4;  // half wall thickness
+const H  = 18;   // half maze size (9 cells × 2 = 18)
+const WH = 3.5;  // wall height
+const GAP = 5;   // entrance/exit opening width
+
+// Convert local spawn [0, 1.5, 24] to world space:
+const _localSpawn = new THREE.Vector3(0, 1.5, H + 6);
+const _euler = new THREE.Euler(0, MAZE_ROT, 0);
+export const MAZE_WORLD_SPAWN = _localSpawn.clone()
+    .applyEuler(_euler)
+    .add(MAZE_POS);
+
+// Car should face INTO maze = opposite of spawn direction = MAZE_ROT
+export const MAZE_WORLD_FACING = MAZE_ROT;
+// ─────────────────────────────────────────────────────────────────────────
 
 // ── Persistent high score ────────────────────────────────────────────────
 let globalBestTime = Infinity;
@@ -35,53 +45,56 @@ let _ghostTimer: ReturnType<typeof setTimeout> | null = null;
 // Left/Right: full solid
 
 // OUTER WALLS
-const GAP = 5; // gap width at entrance/exit
-const OUTER: [number, number, number, number][] = [
-    // [cx,   cz,    half-width-x,  half-depth-z]
-    [-8.25, 14, 5.75, 0.3],   // south LEFT
-    [8.25, 14, 5.75, 0.3],   // south RIGHT
-    [-8.25, -14, 5.75, 0.3],   // north LEFT  (exit)
-    [8.25, -14, 5.75, 0.3],   // north RIGHT (exit)
-    [-14, 0, 0.3, 14],   // west FULL
-    [14, 0, 0.3, 14],   // east FULL
-];
+const OUTER: [cx: number, cz: number, hw: number, hd: number][] = [
+  [-10.25,  H,   7.75, T],   // south LEFT
+  [ 10.25,  H,   7.75, T],   // south RIGHT
+  [-10.25, -H,   7.75, T],   // north LEFT  (exit)
+  [ 10.25, -H,   7.75, T],   // north RIGHT (exit)
+  [-H,      0,   T,    H ],  // west FULL
+  [ H,      0,   T,    H ],  // east FULL
+]
 
-// INNER WALLS — traced from the image maze pattern
-// Grid: 7 columns × 7 rows, each cell = 2 units (S = 2)
-// All coords relative to maze center [0,0]
-const S2 = 2;  // one cell
-
+// INNER WALLS — traced from a 9x9 grid
 const INNER: [number, number, number, number][] = [
-    // ── Horizontal segments ───────────────────────────────────────────
-    // Top horizontal bar (leaves left 2 cells and right gap for exit open)
-    [-3 * S2, -5 * S2, 4 * S2, HT],   // top bar left portion
+  // ── Row 2 horizontal walls ──────────────────────────────────────────
+  [-6,  10,  2, T],   // cols 1-2 blocked
+  [ 0,  10,  2, T],   // col 3-4
+  [ 6,  10,  2, T],   // col 5-6
 
-    // Upper-middle horizontal
-    [1 * S2, -3 * S2, 3 * S2, HT],   // right side upper
+  // ── Row 3 horizontal walls ──────────────────────────────────────────
+  [-2,   6,  2, T],   // one segment
+  [ 8,   6,  2, T],   // right side
 
-    // Middle horizontal — nearly full width, leaves right gap
-    [-2 * S2, -1 * S2, 5 * S2, HT],   // middle left
+  // ── Row 4 horizontal walls (long wall divides top from bottom) ──────
+  [-10,  2,  2, T],
+  [-4,   2,  6, T],   // longer segment — 3 cells
+  [ 8,   2,  2, T],
 
-    // Lower-middle horizontal
-    [1 * S2, 1 * S2, 3 * S2, HT],   // right side lower
+  // ── Row 6 horizontal walls ──────────────────────────────────────────
+  [-4,  -6,  6, T],   // 3 cells center
+  [ 8,  -6,  2, T],
 
-    // Near-bottom horizontal
-    [-2 * S2, 3 * S2, 4 * S2, HT],   // bottom-ish left
+  // ── Row 8 horizontal walls ──────────────────────────────────────────
+  [-6,  -10, 2, T],
+  [ 0,  -10, 2, T],
+  [ 6,  -10, 2, T],
 
-    // ── Vertical segments ──────────────────────────────────────────────
-    // Far left inner vertical — long
-    [-5 * S2, 0 * S2, HT, 3 * S2],  // left spine upper
-    [-5 * S2, 4 * S2, HT, 2 * S2],  // left spine lower
+  // ── Vertical walls ───────────────────────────────────────────────────
+  [-12,  8, T,  2],   // left inner spine north
+  [-12, -2, T,  4],   // left inner spine south
 
-    // Left-center vertical short
-    [-1 * S2, -4 * S2, HT, 2 * S2],  // upper-center left
+  [-4,  14, T,  2],   // Col 3 boundary short top
+  [-4,   0, T,  2],   // mid
+  [-4,  -8, T,  2],   // near bottom
 
-    // Center vertical short
-    [1 * S2, 0 * S2, HT, 1 * S2],  // center mid
+  [ 4,   8, T,  2],   // Center vertical
+  [ 4,  -4, T,  4],
 
-    // Right inner vertical — long
-    [3 * S2, -2 * S2, HT, 3 * S2],  // right spine
-];
+  [ 12,  4, T,  6],   // Col 7 boundary long mid
+
+  [ 8,  12, T,  2],   // Right inner
+  [ 8,  -4, T,  2],
+]
 
 const ALL_WALLS = [...OUTER, ...INNER];
 
@@ -120,20 +133,32 @@ export const Maze = memo(function Maze() {
 
     // ── Spawn car at maze entrance ──────────────────────────────────────────
     const respawnToStart = useCallback(() => {
-        setTeleportTarget([
-            MAZE_POS[0] + SPAWN_REL[0],
-            SPAWN_REL[1],
-            MAZE_POS[2] + SPAWN_REL[2],
-        ]);
-    }, [setTeleportTarget]);
+        // Fire a single event with BOTH position and rotation
+        window.dispatchEvent(new CustomEvent('car:teleport', {
+            detail: {
+                x: MAZE_WORLD_SPAWN.x,
+                y: MAZE_WORLD_SPAWN.y,
+                z: MAZE_WORLD_SPAWN.z,
+                rotationY: MAZE_WORLD_FACING,
+            }
+        }));
+    }, []);
+
+    const [lastExitTime, setLastExitTime] = useState(0);
 
     // ── Entry trigger (south sensor) — show modal ──────────────────────────
     const handleTriggerEnter = (e: any) => {
         const obj = e.other?.rigidBodyObject;
         if (!obj?.userData?.isCar) return;
+        
+        // Prevent instant re-trigger after exit (5s grace period)
+        if (performance.now() - lastExitTime < 5000) return;
+
         if (modalShown && mode !== null) return;
         window.dispatchEvent(new CustomEvent('maze:show-modal'));
         setModalShown(true);
+        // FREEZE CAR IMMEDIATELY
+        window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }));
     };
 
     const handleEnter = (e: any) => {
@@ -197,9 +222,18 @@ export const Maze = memo(function Maze() {
         if (modeRef.current === 'reset') {
             setRunning(false);
             startTime.current = 0;
+            setHitCount(0);
+            setModalShown(false);
             respawnToStart();
             window.dispatchEvent(new CustomEvent('maze:reset'));
-            fireAchievement({ type: 'maze', title: 'WALL HIT', value: 'RESET', subtext: 'Teleporting back to start…', color: '#ff2200', duration: 2000 });
+            fireAchievement({ 
+                type: 'maze', 
+                title: 'WALL HIT', 
+                value: 'RESET', 
+                subtext: 'Return to entrance', 
+                color: '#ff2200', 
+                duration: 2000 
+            });
         } else {
             // Counter mode
             setHitCount(c => {
@@ -215,7 +249,6 @@ export const Maze = memo(function Maze() {
         }
     };
 
-    // ── Mode selection via event bus + ghost mode cheat ───────────────────────
     useEffect(() => {
         const onSelected = (e: Event) => {
             const { mode: m } = (e as CustomEvent).detail as { mode: 'reset' | 'counter' };
@@ -224,30 +257,35 @@ export const Maze = memo(function Maze() {
             setHitCount(0);
             startTime.current = 0;
             setRunning(false);
+            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }));
             // Timer starts on entry sensor — don't start it here
             window.dispatchEvent(new CustomEvent('maze:mode-active', { detail: { mode: m } }));
         };
-        const onExit = () => {
+        const onDismissed = () => {
+            setModalShown(false);
             setMode(null);
             modeRef.current = null;
-            setRunning(false);
-            startTime.current = 0;
-            setHitCount(0);
-            setModalShown(false);
-            window.dispatchEvent(new CustomEvent('maze:exited'));
+            setLastExitTime(performance.now());
         };
-        const onGhost = () => {
-            _ghostMode = true;
-            if (_ghostTimer) clearTimeout(_ghostTimer);
-            _ghostTimer = setTimeout(() => { _ghostMode = false; _ghostTimer = null; }, 30000);
+        const onForceExit = () => {
+            setRunning(false);
+            setMode(null);
+            modeRef.current = null;
+            setModalShown(false);
+            setHitCount(0);
+            startTime.current = 0;
+            setLastExitTime(performance.now());
+            window.dispatchEvent(new CustomEvent('maze:reset'));
+            window.dispatchEvent(new CustomEvent('maze:exited'));
+            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }));
         };
         window.addEventListener('maze:mode-selected', onSelected);
-        window.addEventListener('maze:exit', onExit);
-        window.addEventListener('cheat:ghost-mode', onGhost);
+        window.addEventListener('maze:dismissed', onDismissed);
+        window.addEventListener('maze:force-exit', onForceExit);
         return () => {
             window.removeEventListener('maze:mode-selected', onSelected);
-            window.removeEventListener('maze:exit', onExit);
-            window.removeEventListener('cheat:ghost-mode', onGhost);
+            window.removeEventListener('maze:dismissed', onDismissed);
+            window.removeEventListener('maze:force-exit', onForceExit);
         };
     }, []);
 
@@ -255,17 +293,17 @@ export const Maze = memo(function Maze() {
     const wallEmissive = '#00bfff';
 
     return (
-        <group position={MAZE_POS}>
+        <group position={[-110, 0, 110]} rotation={[0, MAZE_ROT, 0]}>
 
             {/* ── Large ground square ────────────────────────────────────────── */}
             <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                <planeGeometry args={[MAZE_SIZE + 2, MAZE_SIZE + 2]} />
+                <planeGeometry args={[40, 40]} />
                 <meshStandardMaterial color="#000d1a" roughness={0.95} />
             </mesh>
 
             {/* Subtle grid on maze floor */}
             <gridHelper
-                args={[MAZE_SIZE, 14, '#00bfff', '#001a3a']}
+                args={[36, 18, '#00bfff', '#001a3a']}
                 position={[0, 0.02, 0]}
             />
 
@@ -274,14 +312,14 @@ export const Maze = memo(function Maze() {
                 <RigidBody
                     key={i}
                     type="fixed"
-                    position={[cx, WALL_H / 2, cz]}
+                    position={[cx, WH / 2, cz]}
                     onCollisionEnter={handleWallHit}
                     userData={{ isMazeWall: true }}
                 >
-                    <CuboidCollider args={[hw, WALL_H / 2, hd]} />
+                    <CuboidCollider args={[hw, WH / 2, hd]} />
                     {/* Main wall body */}
                     <mesh castShadow receiveShadow>
-                        <boxGeometry args={[hw * 2, WALL_H, hd * 2]} />
+                        <boxGeometry args={[hw * 2, WH, hd * 2]} />
                         <meshStandardMaterial
                             color={wallColor}
                             emissive={wallEmissive}
@@ -291,7 +329,7 @@ export const Maze = memo(function Maze() {
                         />
                     </mesh>
                     {/* Glowing top cap */}
-                    <mesh position={[0, WALL_H / 2 + 0.06, 0]}>
+                    <mesh position={[0, WH / 2 + 0.06, 0]}>
                         <boxGeometry args={[hw * 2, 0.1, hd * 2]} />
                         <meshBasicMaterial color="#00bfff" transparent opacity={0.7} />
                     </mesh>
@@ -299,35 +337,29 @@ export const Maze = memo(function Maze() {
             ))}
 
             {/* ── Exit anti-entry sensor — detects car approaching exit from wrong side ─────────── */}
-            {/* Position it just outside the maze north wall */}
             <RigidBody type="fixed" colliders={false} sensor
                 onIntersectionEnter={(e: any) => {
                     const obj = e.other?.rigidBodyObject;
                     if (!obj?.userData?.isCar) return;
 
-                    // Check if car is OUTSIDE the maze (z < -HALF means north of maze)
-                    const pos = obj.translation?.() ?? obj.getWorldPosition?.(new THREE.Vector3());
-                    const carZ = (pos?.z ?? 0) - MAZE_POS[2];  // relative to maze center
+                    const pos = obj.translation();
+                    const carZ = (new THREE.Vector3(pos.x, pos.y, pos.z))
+                        .sub(new THREE.Vector3(-110, 0, 110))
+                        .applyEuler(new THREE.Euler(0, -MAZE_ROT, 0)).z;
 
-                    if (carZ < -HALF) {
-                        // Car is outside trying to enter through exit — push it back north
-                        setTeleportTarget([
-                            MAZE_POS[0],
-                            1.5,
-                            MAZE_POS[2] - HALF - 6,  // spawn outside north, away from wall
-                        ]);
+                    if (carZ < -18) {
+                        respawnToStart();
                     }
                 }}
             >
                 <CuboidCollider
                     args={[GAP / 2, 2, 1.5]}
-                    position={[0, 2, -HALF - 1.5]}  // just outside north wall
+                    position={[0, 2, -18 - 1.5]}
                 />
             </RigidBody>
 
             {/* ── TRIGGER SQUARE — in front of south entrance ──────────────── */}
-            {/* Positioned outside maze, centered on entrance */}
-            <group position={[0, 0, HALF + 5]}>   {/* 5 units south of maze wall */}
+            <group position={[0, 0, 18 + 5]}>
 
                 {/* Glowing floor square — bigger than car (~8×8 units) */}
                 <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -373,7 +405,7 @@ export const Maze = memo(function Maze() {
             </group>
 
             {/* ── South entry sensor (timer start) ──────────── */}
-            <group position={[0, 0, HALF]}>
+            <group position={[0, 0, 18]}>
                 {/* Green glow strip on ground */}
                 <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                     <planeGeometry args={[GAP, 1.5]} />
@@ -398,7 +430,7 @@ export const Maze = memo(function Maze() {
             </group>
 
             {/* ── North exit sensor ─────────────────────────────────────────── */}
-            <group position={[0, 0, -HALF]}>
+            <group position={[0, 0, -18]}>
                 {/* Purple glow strip on ground */}
                 <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                     <planeGeometry args={[GAP, 1.5]} />
@@ -422,7 +454,7 @@ export const Maze = memo(function Maze() {
             </group>
 
             {/* ── 3D Scoreboard above south entrance ────────────────────────── */}
-            <Html position={[0, 7, HALF + 2]} center distanceFactor={14}>
+            <Html position={[0, 7, 18 + 2]} center distanceFactor={14}>
                 <div style={{
                     fontFamily: "'JetBrains Mono', monospace",
                     textAlign: 'center',
