@@ -52,18 +52,38 @@ export function StandardPortfolio() {
     return (
         <div className="relative min-h-screen w-full bg-[var(--color-bg)] text-[var(--color-text)] font-body z-0 overflow-x-hidden">
 
-            {/* LightPillar Background — fixed, stays locked in place */}
-            <div className="fixed inset-0 z-[-1] pointer-events-none" style={{ width: '100vw', height: '100vh' }}>
+            {/* LightPillar Background — two variants: phone/tablet vs laptop/desktop */}
+
+            {/* Phone & Tablet (< md / < 768px): portrait-optimised, lighter */}
+            <div className="fixed inset-0 z-[-1] pointer-events-none block md:hidden" style={{ width: '100vw', height: '100vh' }}>
                 <LightPillar
-                    topColor="#114b22"
+                    topColor="#000000"
                     bottomColor="#249b22"
+                    intensity={1}
+                    rotationSpeed={0.13}
+                    glowAmount={0.008}
+                    pillarWidth={2.5}
+                    pillarHeight={0.5}
+                    noiseIntensity={0}
+                    pillarRotation={40}
+                    interactive={false}
+                    mixBlendMode="screen"
+                    quality="low"
+                />
+            </div>
+
+            {/* Laptop & Desktop (≥ md / ≥ 768px): wide landscape variant */}
+            <div className="fixed inset-0 z-[-1] pointer-events-none hidden md:block" style={{ width: '100vw', height: '100vh' }}>
+                <LightPillar
+                    topColor="#28b31e"
+                    bottomColor="#030503"
                     intensity={1}
                     rotationSpeed={0.1}
                     glowAmount={0.002}
-                    pillarWidth={4.7}
+                    pillarWidth={7}
                     pillarHeight={0.4}
                     noiseIntensity={0}
-                    pillarRotation={302}
+                    pillarRotation={235}
                     interactive={false}
                     mixBlendMode="screen"
                     quality="high"

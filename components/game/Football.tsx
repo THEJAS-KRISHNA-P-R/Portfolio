@@ -15,36 +15,33 @@ export function Football() {
     const meshRef = useRef<THREE.Mesh>(null);
     const [, getKeys] = useKeyboardControls();
 
-    // Fix 9: idle auto-reset refs
-    const idleTimer = useRef(0);
+    // FOOTBALL FIX: 5 seconds after last hit
+    const lastHitTimeRef = useRef(0);
+    const RESET_DELAY_MS = 5000;
 
     useFrame((_, delta) => {
         if (!ballRef.current) return;
         const pos = ballRef.current.translation();
         const { reset } = getKeys();
 
-        // Reset if fallen off world
+        // Reset if fallen off world or manual reset
         if (pos.y < -10 || reset) {
             ballRef.current.setTranslation({ x: SPAWN[0], y: SPAWN[1], z: SPAWN[2] }, true);
             ballRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
             ballRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
-            idleTimer.current = 0;
+            lastHitTimeRef.current = 0;
+            return;
         }
 
-        // Fix 9: Auto-reset when ball is stationary for 10 seconds
-        const vel = ballRef.current.linvel();
-        const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
-
-        if (speed < 0.15) {
-            idleTimer.current += delta;
-            if (idleTimer.current > 10) {
+        // FOOTBALL FIX: Reset 5 seconds after the last hit
+        if (lastHitTimeRef.current > 0) {
+            const timeSinceHit = Date.now() - lastHitTimeRef.current;
+            if (timeSinceHit > RESET_DELAY_MS) {
                 ballRef.current.setTranslation({ x: SPAWN[0], y: SPAWN[1], z: SPAWN[2] }, true);
                 ballRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
                 ballRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
-                idleTimer.current = 0;
+                lastHitTimeRef.current = 0;
             }
-        } else {
-            idleTimer.current = 0;
         }
     });
 
@@ -59,6 +56,14 @@ export function Football() {
             linearDamping={0.4}     // Fix 9: was 0.5 — rolls further
             angularDamping={0.3}
             position={SPAWN}
+            // FOOTBALL FIX: only record a hit if the ball is already moving (car strike),
+            // not from resting contact with the ground at spawn
+            onCollisionEnter={() => {
+                const vel = ballRef.current?.linvel()
+                if (!vel) return
+                const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
+                if (speed > 1.5) lastHitTimeRef.current = Date.now()
+            }}
         >
             <BallCollider args={[0.5]} />
             <mesh ref={meshRef} castShadow>

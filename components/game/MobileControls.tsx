@@ -104,6 +104,218 @@ function GameButton({
   )
 }
 
+// ── Fullscreen double-tap TURBO overlay ────────────────────────────────
+// Transparent div covers the screen at z-index 99 (below all control buttons at z 250+).
+// Double-tap anywhere that ISN’T a button activates turbo for 3 seconds.
+function ScreenDoubleTapTurbo() {
+  const lastTapRef     = useRef(0)
+  const boostTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [flash, setFlash] = useState(false)
+
+  const handleTap = (e: React.PointerEvent) => {
+    // Let button presses fall through to the actual button (they’re at higher z-index)
+    // This handler only fires on areas NOT covered by a button
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+
+    const now = Date.now()
+    if (now - lastTapRef.current < 300) {
+      mobileInput.boost = true
+      setFlash(true)
+      if (boostTimerRef.current) clearTimeout(boostTimerRef.current)
+      boostTimerRef.current = setTimeout(() => {
+        mobileInput.boost = false
+        setFlash(false)
+      }, 3000)
+    }
+    lastTapRef.current = now
+  }
+
+  useEffect(() => () => { if (boostTimerRef.current) clearTimeout(boostTimerRef.current) }, [])
+
+  return (
+    <>
+      {/* Invisible fullscreen tap catcher — z:99 so all controls remain on top */}
+      <div
+        onPointerDown={handleTap}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99,
+          background: 'transparent',
+          pointerEvents: 'auto',
+          touchAction: 'none',
+        }}
+      />
+      {flash && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: '#FFD700',
+          fontSize: 28,
+          fontWeight: 'bold',
+          fontFamily: 'monospace',
+          letterSpacing: 4,
+          pointerEvents: 'none',
+          zIndex: 300,
+          textShadow: '0 0 20px #FFD700',
+        }}>
+          ⚡ TURBO
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Virtual Joystick — pure pointer-events, no library ───────────────────────
+// Inspired by Bruno Simon's folio-2025 Nipple.js approach:
+// one-finger drag → analog steer + throttle, progress^3 acceleration curve,
+// pointer capture for clean multi-touch handling.
+const JOYSTICK_RADIUS = 56   // px — max knob travel from center
+const JOYSTICK_DEAD   = 0.14  // normalized dead-zone
+
+function VirtualJoystick() {
+  const baseRef = useRef<HTMLDivElement>(null)
+  const knobRef = useRef<HTMLDivElement>(null)
+  const state   = useRef({ active: false, pid: -1, cx: 0, cy: 0 })
+
+  useEffect(() => {
+    const base = baseRef.current
+    if (!base) return
+
+    const release = () => {
+      state.current.active = false
+      state.current.pid    = -1
+      mobileInput.forward   = false
+      mobileInput.brake     = false
+      mobileInput.backward  = false
+      mobileInput.left      = false
+      mobileInput.right     = false
+      mobileInput.steerX    = 0
+      mobileInput.throttleY = 0
+      if (knobRef.current) {
+        knobRef.current.style.transform = 'translate(-50%, -50%)'
+        knobRef.current.style.opacity   = '0.38'
+        knobRef.current.style.boxShadow = '0 0 10px rgba(0,230,118,0.20)'
+      }
+    }
+
+    const onDown = (e: PointerEvent) => {
+      e.preventDefault()
+      if (state.current.active) return
+      state.current.active = true
+      state.current.pid    = e.pointerId
+      base.setPointerCapture(e.pointerId)
+      const r = base.getBoundingClientRect()
+      state.current.cx = r.left + r.width  / 2
+      state.current.cy = r.top  + r.height / 2
+      if (knobRef.current) knobRef.current.style.opacity = '1'
+    }
+
+    const onMove = (e: PointerEvent) => {
+      e.preventDefault()
+      if (!state.current.active || e.pointerId !== state.current.pid) return
+
+      const rawDx = e.clientX - state.current.cx
+      const rawDy = e.clientY - state.current.cy
+      const dist  = Math.hypot(rawDx, rawDy)
+      const scale = dist > 0 ? Math.min(dist, JOYSTICK_RADIUS) / dist : 0
+      const kx    = rawDx * scale  // clamped px offset
+      const ky    = rawDy * scale
+
+      // Normalized -1..1 analog values
+      const sx =  kx / JOYSTICK_RADIUS  //  left(-) / right(+)
+      const sy = -ky / JOYSTICK_RADIUS  //  up(+)  / down(-)  → forward positive
+
+      // Progress^3 curve (Bruno Simon style) on the throttle axis
+      const throttle = Math.sign(sy) * Math.pow(Math.abs(sy), 3)
+
+      const fsX = Math.abs(sx) > JOYSTICK_DEAD ? sx : 0
+      const fsY = Math.abs(sy) > JOYSTICK_DEAD ? throttle : 0
+
+      mobileInput.forward   = fsY >  JOYSTICK_DEAD
+      mobileInput.brake     = fsY < -JOYSTICK_DEAD
+      mobileInput.backward  = fsY < -JOYSTICK_DEAD
+      mobileInput.left      = fsX < -JOYSTICK_DEAD
+      mobileInput.right     = fsX >  JOYSTICK_DEAD
+      mobileInput.steerX    = fsX
+      mobileInput.throttleY = fsY
+
+      // Visual knob
+      if (knobRef.current) {
+        const glow = `0 0 ${10 + dist * 0.18}px rgba(0,230,118,${0.25 + Math.min(dist / JOYSTICK_RADIUS, 1) * 0.4})`
+        knobRef.current.style.transform  = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`
+        knobRef.current.style.boxShadow  = glow
+      }
+    }
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== state.current.pid) return
+      release()
+    }
+
+    base.addEventListener('pointerdown',   onDown,  { passive: false })
+    base.addEventListener('pointermove',   onMove,  { passive: false })
+    base.addEventListener('pointerup',     onUp)
+    base.addEventListener('pointercancel', onUp)
+
+    return () => {
+      base.removeEventListener('pointerdown',   onDown)
+      base.removeEventListener('pointermove',   onMove)
+      base.removeEventListener('pointerup',     onUp)
+      base.removeEventListener('pointercancel', onUp)
+      release()
+    }
+  }, [])
+
+  return (
+    <div
+      ref={baseRef}
+      style={{
+        position: 'fixed',
+        left: '8vw',
+        bottom: 80,
+        width: 140,
+        height: 140,
+        zIndex: 250,
+        borderRadius: '50%',
+        background: 'rgba(0,255,136,0.02)',
+        border: '1px solid rgba(0,255,136,0.10)',
+        touchAction: 'none',
+        pointerEvents: 'auto',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
+    >
+      {/* Crosshair guides */}
+      <div style={{ position:'absolute', top:'50%', left:'12%', right:'12%', height:1, background:'rgba(0,255,136,0.10)', transform:'translateY(-50%)', pointerEvents:'none' }} />
+      <div style={{ position:'absolute', left:'50%', top:'12%', bottom:'12%', width:1, background:'rgba(0,255,136,0.10)', transform:'translateX(-50%)', pointerEvents:'none' }} />
+      {/* Knob */}
+      <div
+        ref={knobRef}
+        style={{
+          position: 'absolute',
+          top: '50%', left: '50%',
+          width: 44, height: 44,
+          borderRadius: '50%',
+          background: 'rgba(0,230,118,0.15)',
+          border: '2px solid rgba(0,230,118,0.55)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          transform: 'translate(-50%, -50%)',
+          opacity: 0.38,
+          boxShadow: '0 0 10px rgba(0,230,118,0.20)',
+          pointerEvents: 'none',
+          transition: 'opacity 0.1s',
+          willChange: 'transform',
+        }}
+      />
+    </div>
+  )
+}
+
 function SettingsSheet({
   visible,
   onClose,
@@ -157,7 +369,7 @@ function SettingsSheet({
 
         {([
           { id: 'buttons',  label: 'BUTTONS',  desc: 'Left = steer  |  Right = gas/brake', emoji: '🎮', disabled: false },
-          { id: 'joystick', label: 'JOYSTICK', desc: 'Virtual analog stick (coming soon)',  emoji: '🕹️', disabled: true },
+          { id: 'joystick', label: 'JOYSTICK', desc: 'Virtual analog stick',               emoji: '🕹️', disabled: false },
         ] as const).map(opt => (
           <button
             key={opt.id}
@@ -242,6 +454,19 @@ export function MobileControls() {
   const [activeForward, setActiveForward] = useState(false)
   const [activeBrake,   setActiveBrake]   = useState(false)
 
+  const handleGasPress = () => {
+    mobileInput.forward = true
+    setActiveForward(true)
+    mobileInput.throttleY = 1
+  }
+
+  const handleGasRelease = () => {
+    mobileInput.forward = false
+    setActiveForward(false)
+    mobileInput.throttleY = 0
+    // boost stays active until the 3s timeout clears it
+  }
+
   useEffect(() => {
     const h = (e: Event) => setFrozen((e as CustomEvent).detail.frozen)
     window.addEventListener('game:freeze-controls', h)
@@ -258,6 +483,7 @@ export function MobileControls() {
 
   return (
     <>
+      <ScreenDoubleTapTurbo />
       {isTouch && (
         <button
           onPointerDown={e => { e.preventDefault(); setSettingsOpen(v => !v) }}
@@ -288,7 +514,10 @@ export function MobileControls() {
         </button>
       )}
 
-      {!frozen && (
+      {!frozen && scheme === 'joystick' && <VirtualJoystick />}
+
+      {/* Section 5: Buttons mode — unchanged layout */}
+      {!frozen && scheme === 'buttons' && (
         <div style={{
           position: 'fixed',
           bottom: 'max(4.5rem, calc(env(safe-area-inset-bottom) + 4rem))',
@@ -332,14 +561,15 @@ export function MobileControls() {
               onPress={() => { mobileInput.brake = true; mobileInput.backward = true; setActiveBrake(true); mobileInput.throttleY = -1; }}
               onRelease={() => { mobileInput.brake = false; mobileInput.backward = false; setActiveBrake(false); mobileInput.throttleY = 0; }}
             />
+            {/* Section 6: Double-tap GAS = TURBO */}
             <GameButton
               label="GAS"
               emoji="▲"
               active={activeForward}
               color="rgba(0,230,118,0.5)"
               size={BTN}
-              onPress={() => { mobileInput.forward = true;  setActiveForward(true); mobileInput.throttleY = 1; }}
-              onRelease={() => { mobileInput.forward = false; setActiveForward(false); mobileInput.throttleY = 0; }}
+              onPress={handleGasPress}
+              onRelease={handleGasRelease}
             />
           </div>
         </div>

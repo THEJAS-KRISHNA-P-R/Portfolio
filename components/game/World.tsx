@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, memo, useState } from "react";
+import React, { Suspense, useEffect, memo, useState, useCallback } from "react";
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 import { AdaptiveEvents, PerformanceMonitor, KeyboardControls, Environment, Stars, Instances, Instance } from "@react-three/drei";
@@ -250,7 +250,8 @@ function GameCanvas({ children }: { children: React.ReactNode }) {
         stencil:             false,
         alpha:               false,
         toneMapping:         THREE.ACESFilmicToneMapping,
-        toneMappingExposure: profile.tier === 'low' ? 1.0 : 1.1,
+        // VISUAL FIX: Exposure boost — was 1.0/1.1, now per-tier
+        toneMappingExposure: profile.tier === 'high' ? 1.3 : profile.tier === 'mid' ? 1.2 : 1.1,
         outputColorSpace:    THREE.SRGBColorSpace,
       }}
       onCreated={({ gl }) => {
@@ -266,7 +267,8 @@ function GameCanvas({ children }: { children: React.ReactNode }) {
       <PerformanceMonitor
         bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
         onDecline={() => setDpr(d => {
-          const minDPR = profile.isMobile ? 0.5 : 1.0;
+          // VISUAL FIX: Minimum DPR floor on mobile — never go below 0.85 on phone
+          const minDPR = profile.isMobile ? 0.85 : 1.0;
           return Math.max(minDPR, d - 0.1);
         })}
         onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
@@ -283,9 +285,11 @@ function SceneLights() {
 
   return (
     <>
+      {/* VISUAL FIX: Background is dark navy */}
+      <color attach="background" args={['#0a0f1a']} />
       <directionalLight
         position={[40, 60, 20]}
-        intensity={1.8}
+        intensity={2.52}
         color="#c8e8ff"
         castShadow={profile.shadows}
         shadow-mapSize={[profile.shadowMapSize, profile.shadowMapSize]}
@@ -296,19 +300,23 @@ function SceneLights() {
         shadow-bias={-0.0003}
         shadow-normalBias={0.02}
       />
-      <directionalLight position={[-30, 8, 40]} intensity={0.35} color="#ff9944" castShadow={false} />
+      <directionalLight position={[-30, 8, 40]} intensity={0.49} color="#ff9944" castShadow={false} />
       {profile.tier !== 'low' && (
-        <directionalLight position={[-20, 15, -60]} intensity={0.5} color="#66aaff" castShadow={false} />
+        <directionalLight position={[-20, 15, -60]} intensity={0.7} color="#66aaff" castShadow={false} />
       )}
-      <ambientLight intensity={profile.tier === 'low' ? 0.55 : 0.18} color="#102030" />
-      <hemisphereLight args={['#1a3a6a', '#0a1a10', 0.6]} />
+      {/* VISUAL FIX: Much brighter ambient — was too dark on all devices */}
+      <ambientLight intensity={profile.tier === 'high' ? 1.3 : profile.tier === 'mid' ? 1.1 : 0.9} />
+      {/* VISUAL FIX: Hemisphere sky/ground light boost — skyColor = color prop in THREE */}
+      <hemisphereLight args={['#b0c8ff', '#1a2a1a', 0.9]} />
       {profile.tier !== 'low' && (
         <>
           <Stars radius={180} depth={50} count={profile.starCount} factor={3} saturation={0.8} fade speed={0.3} />
-          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 256 : 64} />
+          {/* VISUAL FIX: Environment map — off on low mobile to save perf */}
+          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 128 : 32} />
         </>
       )}
-      {profile.fog && <fog attach="fog" args={['#0a0a0f', 55, 130]} />}
+      {/* VISUAL FIX: Fog lightened so far objects aren't invisible */}
+      {profile.fog && <fog attach="fog" args={['#0d1520', 40, 200]} />}
     </>
   )
 }
@@ -345,13 +353,30 @@ export function World() {
   return <GameWorld />
 }
 
+// LAZY LOAD FIX: Signals when the scene has mounted inside the Canvas
+function SceneReadyNotifier({ onReady }: { onReady: () => void }) {
+  useEffect(() => { onReady() }, [onReady])
+  return null
+}
+
 function GameWorld() {
+    const [sceneReady, setSceneReady] = useState(false)
+    const handleReady = useCallback(() => setSceneReady(true), [])
+
     return (
         <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none', zIndex: 1 }}>
             <Suspense fallback={<WorldFallback />}>
                 <KeyboardControls map={keyboardMap}>
+                    {/* LAZY LOAD FIX: Crossfade from loader to scene — no hard flash */}
+                    <div style={{
+                        opacity: sceneReady ? 1 : 0,
+                        transition: 'opacity 0.6s ease',
+                        position: 'absolute',
+                        inset: 0,
+                    }}>
                     <GameCanvas>
                         {/* Scene */}
+                        <SceneReadyNotifier onReady={handleReady} />
                         <SceneLights />
                         <Effects />
 
@@ -386,6 +411,7 @@ function GameWorld() {
                             ))}
                         </AdaptivePhysics>
                     </GameCanvas>
+                    </div>
                 </KeyboardControls>
             </Suspense>
         </div>

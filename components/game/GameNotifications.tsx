@@ -46,8 +46,16 @@ const TYPE_ICON: Record<GameNotifType, string> = {
 }
 
 // ── Global fire helper ────────────────────────────────────────────────────
+// NOTIFICATION FIX: One notification per event type, with cooldown
+const notifCooldowns = new Map<string, number>()
+const COOLDOWN_MS = 2500  // min time between same-type notifications
+
 export function fireNotif(data: GameNotifData) {
   if (typeof window !== 'undefined') {
+    const now = Date.now()
+    const last = notifCooldowns.get(data.type) ?? 0
+    if (now - last < COOLDOWN_MS) return  // skip duplicate within cooldown window
+    notifCooldowns.set(data.type, now)
     window.dispatchEvent(new CustomEvent('game:achievement', { detail: data }))
   }
 }
@@ -55,6 +63,8 @@ export function fireNotif(data: GameNotifData) {
 // ── Single toast ──────────────────────────────────────────────────────────
 interface ToastEntry extends GameNotifData { id: number }
 let _nextId = 0
+// NOTIFICATION FIX: Container-level cooldown guard (catches direct dispatches)
+const _containerCooldowns = new Map<string, number>()
 
 function NotifToast({
   data,
@@ -155,9 +165,14 @@ export function GameNotifContainer() {
   useEffect(() => {
     const handler = (e: Event) => {
       const d = (e as CustomEvent<GameNotifData>).detail
+      // NOTIFICATION FIX: Rate-limit at container level too
+      const now = Date.now()
+      const last = _containerCooldowns.get(d.type) ?? 0
+      if (now - last < COOLDOWN_MS) return
+      _containerCooldowns.set(d.type, now)
       _nextId++
       setToasts(p => {
-        // Remove any existing toast of same type before adding new one
+        // NOTIFICATION FIX: Remove existing same-type, cap visible to 2 (newest on top)
         const filtered = p.filter(t => t.type !== d.type)
         return [...filtered.slice(-1), { ...d, id: _nextId }]
       })

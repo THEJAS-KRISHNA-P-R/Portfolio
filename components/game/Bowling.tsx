@@ -7,6 +7,7 @@ import { useFrame } from "@react-three/fiber";
 import { Html, useGLTF } from "@react-three/drei";
 import { fireAchievement } from "./AchievementToast";
 import { StrikeAnimation } from "./StrikeAnimation";
+import { getLaneFloorMaterial } from "@/lib/materials";
 
 // Preload so all 10 instances share the same asset fetch
 useGLTF.preload('/bowling_pin.glb');
@@ -53,11 +54,12 @@ function PinModel() {
     return <primitive object={cloned} scale={PIN_VISUAL_SCALE} position={[0, 0, 0]} />;
 }
 
-const BowlingPin = forwardRef<RapierRigidBody, { position: [number, number, number] }>(
-    ({ position }, ref) => (
+const BowlingPin = forwardRef<RapierRigidBody, { position: [number, number, number]; onHit?: () => void }>(
+    ({ position, onHit }, ref) => (
         <RigidBody
             ref={ref}
             position={position}
+            onCollisionEnter={onHit}
             ccd={true}             // ← CRITICAL: pins can tunnel without this
             mass={0.7}             // lighter = tips easier = more dominos
             linearDamping={0.15}   // very low — pins slide and roll into each other
@@ -101,7 +103,8 @@ function BowlingLane() {
             <RigidBody type="fixed" friction={0.05} restitution={0.2}>
                 <mesh position={[CX, LANE_SURF, LANE_ZC]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
                     <planeGeometry args={[LW, LANE_LEN]} />
-                    <meshStandardMaterial color="#c49a3c" roughness={0.22} metalness={0.06} />
+                    {/* VISUAL FIX: Matte wood look, not chrome */}
+                    <meshStandardMaterial {...getLaneFloorMaterial()} color="#c49a3c" />
                 </mesh>
             </RigidBody>
 
@@ -209,12 +212,13 @@ export const Bowling = memo(function Bowling() {
     const [pinsDown, setPinsDown] = useState(0);
     const [showStrike, setShowStrike] = useState(false);
     const lastPinsDown = useRef(0);
-    const firstHitTime = useRef<number | null>(null);
     const settleUntil = useRef<number>(0);
     // Populated after first render so performance.now() is safe client-side
     useEffect(() => { settleUntil.current = performance.now() + 2500; }, []);
     const pinNotifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const autoResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasBeenHitRef      = useRef(false);
+    const lastPinActivityRef = useRef(0);
+    const resetScheduledRef  = useRef(false);
 
     // COL_Y - COL_HY = 0.30 - 0.30 = 0 in local space, so collider bottom is exactly at
     // the RigidBody's world Y. Spawn at 0.005 to avoid exact-zero ground intersection.
@@ -228,7 +232,6 @@ export const Bowling = memo(function Bowling() {
 
     const resetPins = useCallback(() => {
         if (pinNotifTimer.current) { clearTimeout(pinNotifTimer.current); pinNotifTimer.current = null; }
-        if (autoResetTimer.current) { clearTimeout(autoResetTimer.current); autoResetTimer.current = null; }
         setIsResetting(true);
         setTimeout(() => {
             pinRefs.current.forEach((pin, i) => {
@@ -240,7 +243,8 @@ export const Bowling = memo(function Bowling() {
                 pin.setRotation({ x: 0, y: (Math.random() * 0.2 - 0.1), z: 0, w: 1 }, true);
                 pin.sleep();
             });
-            firstHitTime.current = null;
+            hasBeenHitRef.current     = false;
+            resetScheduledRef.current = false;
             lastPinsDown.current = 0;
             settleUntil.current = performance.now() + 2000;
             setPinsDown(0);
@@ -248,6 +252,12 @@ export const Bowling = memo(function Bowling() {
             setIsResetting(false);
         }, 50);
     }, [pinWorldPositions]);
+
+    // Called on every pin onCollisionEnter — ONLY marks that pins have been hit
+    const onPinHit = useCallback(() => {
+        hasBeenHitRef.current      = true;
+        lastPinActivityRef.current = Date.now();
+    }, []);
 
     useEffect(() => {
         const h = () => resetPins();
@@ -268,52 +278,55 @@ export const Bowling = memo(function Bowling() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const scheduleReset = (delay: number) => {
-        if (autoResetTimer.current) clearTimeout(autoResetTimer.current);
-        autoResetTimer.current = setTimeout(resetPins, delay);
-    };
-
     useFrame(() => {
         if (isResetting || pinRefs.current.length < 10) return;
-        // Still in settling window — don't count anything yet
         if (performance.now() < settleUntil.current) return;
+
+        // ── HUD counter ──────────────────────────────────────────────────────
         let fallenCount = 0;
         pinRefs.current.forEach(pin => {
             if (!pin) return;
             const rot = pin.rotation();
             const pos = pin.translation();
             const tilt = Math.abs(rot.x) + Math.abs(rot.z);
-            // A pin is fallen if:
-            // 1. Significantly tilted (>30°), OR
-            // 2. Its Y position has dropped (fell off lane)
-            const isFallen = tilt > 0.52 || pos.y < -0.3
-            if (isFallen) fallenCount++;
+            if (tilt > 0.52 || pos.y < -0.3) fallenCount++;
         });
-        if (fallenCount > 0 && !firstHitTime.current) {
-            firstHitTime.current = performance.now();
-            // ── NEW: Auto-reset timer ──
-            // Reset all pins 5 seconds after the VERY FIRST pin is hit
-            if (autoResetTimer.current) clearTimeout(autoResetTimer.current);
-            autoResetTimer.current = setTimeout(resetPins, 5000);
-        }
         if (fallenCount !== lastPinsDown.current) {
             lastPinsDown.current = fallenCount;
             setPinsDown(fallenCount);
-            if (fallenCount === 10) {
-                if (pinNotifTimer.current) { clearTimeout(pinNotifTimer.current); pinNotifTimer.current = null; }
+        }
+
+        // ── Auto-reset: 5s of stillness after any pin was hit ────────────────
+        if (!hasBeenHitRef.current) return;
+
+        const anyMoving = pinRefs.current.some(ref => {
+            if (!ref) return false;
+            const vel = ref.linvel();
+            return Math.abs(vel.x) + Math.abs(vel.y) + Math.abs(vel.z) > 0.05;
+        });
+
+        if (anyMoving) {
+            lastPinActivityRef.current = Date.now();
+            resetScheduledRef.current  = false;   // pins still active — reset the clock
+        } else if (!resetScheduledRef.current && Date.now() - lastPinActivityRef.current > 5000) {
+            resetScheduledRef.current = true;
+            // Score detection runs here, at the moment all motion has stopped
+            let finalCount = 0;
+            pinRefs.current.forEach(pin => {
+                if (!pin) return;
+                const rot = pin.rotation();
+                const pos = pin.translation();
+                const tilt = Math.abs(rot.x) + Math.abs(rot.z);
+                if (tilt > 0.52 || pos.y < -0.3) finalCount++;
+            });
+            if (finalCount === 10) {
                 setShowStrike(true);
-                fireAchievement({ type: 'bowling', title: 'STRIKE!', value: '10/10', subtext: 'All pins down!', isRecord: false, color: '#ffcc00', duration: 4000 });
                 window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'bowling' } }));
-                scheduleReset(5000);
-            } else if (fallenCount > 0) {
-                if (pinNotifTimer.current) clearTimeout(pinNotifTimer.current);
-                const capturedCount = fallenCount;
-                pinNotifTimer.current = setTimeout(() => {
-                    pinNotifTimer.current = null;
-                    fireAchievement({ type: 'bowling', title: 'PINS DOWN', value: `${capturedCount}/10`, subtext: capturedCount >= 7 ? '🎳 Great shot!' : capturedCount >= 4 ? 'Nice hit!' : 'Keep going!', color: '#ffcc00', duration: 2500 });
-                    scheduleReset(5000);
-                }, 1500);
+            } else if (finalCount > 0) {
+                fireAchievement({ type: 'bowling', title: 'PINS DOWN', value: `${finalCount}/10`, subtext: finalCount >= 7 ? '🎳 Great shot!' : finalCount >= 4 ? 'Nice hit!' : 'Keep going!', color: '#ffcc00', duration: 2500 });
             }
+            hasBeenHitRef.current = false;
+            resetPins();
         }
     });
 
@@ -321,7 +334,7 @@ export const Bowling = memo(function Bowling() {
         <>
             <BowlingLane />
             {pinWorldPositions.map((pos, i) => (
-                <BowlingPin key={i} position={pos} ref={(el) => { if (el) pinRefs.current[i] = el; }} />
+                <BowlingPin key={i} position={pos} onHit={onPinHit} ref={(el) => { if (el) pinRefs.current[i] = el; }} />
             ))}
             <Html position={[BOWLING_POS[0], 5, BOWLING_POS[2] - 1]} center distanceFactor={14}>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', background: 'rgba(5,5,20,0.88)', border: '1px solid rgba(255,204,0,0.3)', borderRadius: '10px', padding: '0.4rem 0.9rem', pointerEvents: 'none', minWidth: '100px' }}>

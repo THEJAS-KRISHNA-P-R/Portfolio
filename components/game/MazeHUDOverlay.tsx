@@ -33,6 +33,11 @@ export function MazeHUDOverlay() {
         const onMazeReset = () => {
             setMazeRunning(false)
             setElapsedDisplay('WALL HIT')
+            // Auto-hide the overlay 2.5 s after wall-hit so it doesn't stick forever
+            setTimeout(() => {
+                setMazeMode(null)
+                setElapsedDisplay('0.0s')
+            }, 2500)
         }
         const onMazeExited = () => {
             setMazeRunning(false)

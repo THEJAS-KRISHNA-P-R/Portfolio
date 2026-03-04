@@ -7,6 +7,8 @@ import { RigidBody, RapierRigidBody, CuboidCollider, useRapier } from "@react-th
 import * as THREE from "three";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { mobileInput } from "@/components/game/MobileControls";
+import { getProfileSync } from "@/lib/deviceTier";
+import { getCarBodyMaterial } from "@/lib/materials";
 
 // ── Rocket League Tuning ─────────────────────────────────────────────────────
 const TOP_SPEED = 18
@@ -117,6 +119,16 @@ export function Car() {
             // 4. Reset internal speed states
             currentSpeed.current = 0;
             forwardDriveTime.current = 0;
+
+            // CONTROL DRIFT FIX: Clear all mobile input state on teleport/reset
+            mobileInput.forward = false;
+            mobileInput.brake   = false;
+            mobileInput.backward = false;
+            mobileInput.left    = false;
+            mobileInput.right   = false;
+            mobileInput.boost   = false;
+            mobileInput.steerX  = 0;
+            mobileInput.throttleY = 0;
         };
 
         window.addEventListener('car:teleport', handler);
@@ -416,6 +428,15 @@ export function Car() {
             body.setLinvel({ x: 0, y: 0, z: 0 }, true);
             body.setAngvel({ x: 0, y: 0, z: 0 }, true);
             currentSpeed.current = 0;
+            // CONTROL DRIFT FIX: Clear all input on fall recovery / manual reset
+            mobileInput.forward = false;
+            mobileInput.brake   = false;
+            mobileInput.backward = false;
+            mobileInput.left    = false;
+            mobileInput.right   = false;
+            mobileInput.boost   = false;
+            mobileInput.steerX  = 0;
+            mobileInput.throttleY = 0;
         }
     });
 
@@ -518,6 +539,9 @@ function CarBody() {
     const { scene } = useGLTF('/classic_muscle_car.glb');
 
     const cloned = useMemo(() => {
+        // VISUAL FIX: Tier-aware car body material — no longer mirror-like
+        const bodyMat = getCarBodyMaterial(getProfileSync().tier);
+
         const c = scene.clone(true);
         c.traverse((child: any) => {
             if (!child.isMesh) return;
@@ -525,11 +549,11 @@ function CarBody() {
             mats.forEach((mat: any, idx: number) => {
                 const m = mat.clone();
                 if (m.name === 'Material') {
-                    // Main body — vivid OrangeRed
+                    // Main body — vivid OrangeRed, matte metallic (not mirror)
                     m.color.setStyle('#ff5500');
-                    m.metalness = 0.25;
-                    m.roughness = 0.22;
-                    m.envMapIntensity = 1.2;
+                    m.metalness = bodyMat.metalness;
+                    m.roughness = bodyMat.roughness;
+                    m.envMapIntensity = bodyMat.envMapIntensity;
                 }
                 if (m.name === 'Material.003') {
                     // Glass

@@ -6,7 +6,6 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { fireAchievement } from "./AchievementToast";
-import { fireNotif } from "@/components/game/GameNotifications";
 
 // Moved to SE corner
 const GOAL_POS: [number, number, number] = [45, 0, 45];
@@ -54,15 +53,6 @@ export function GoalPost() {
                 isRecord: true,
                 duration: 4000,
             });
-            fireNotif({
-                type: 'goal',
-                title: 'GOAL!',
-                value: `${scoreValue} pts`,
-                subtext: '🏆 New high score!',
-                isRecord: true,
-                color: '#00e676',
-                duration: 4000,
-            });
             window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: true, value: `${scoreValue} pts` } }));
         } else {
             fireAchievement({
@@ -71,15 +61,6 @@ export function GoalPost() {
                 value: `${scoreValue} pts`,
                 subtext: `Best: ${currentHigh} pts`,
                 duration: 2500,
-            });
-            fireNotif({
-                type: 'goal',
-                title: 'GOAL!',
-                value: `${scoreValue} pts`,
-                subtext: `Best: ${currentHigh} pts`,
-                isRecord: false,
-                color: '#00e676',
-                duration: 4000,
             });
             window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: false, value: `${scoreValue} pts` } }));
         }

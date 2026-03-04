@@ -90,7 +90,7 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
     _profile = {
       tier:           'low',
       isMobile:       true,
-      dpr:            Math.min(window.devicePixelRatio, 0.85),
+      dpr:            Math.min(window.devicePixelRatio, 1.0),   // VISUAL FIX: was 0.85 → 1.0
       shadows:        false,
       shadowMapSize:  512,
       maxFPS:         30,
@@ -106,7 +106,7 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
     _profile = {
       tier:           'mid',
       isMobile:       true,
-      dpr:            Math.min(window.devicePixelRatio, 1.0),
+      dpr:            Math.min(window.devicePixelRatio, 1.25),  // VISUAL FIX: was 1.0 → 1.25
       shadows:        false,
       shadowMapSize:  512,
       maxFPS:         60,
@@ -122,7 +122,7 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
     _profile = {
       tier:           'high',
       isMobile:       true,
-      dpr:            Math.min(window.devicePixelRatio, 1.3),
+      dpr:            Math.min(window.devicePixelRatio, 1.5),   // VISUAL FIX: was 1.3 → 1.5
       shadows:        true,
       shadowMapSize:  512,
       maxFPS:         60,
