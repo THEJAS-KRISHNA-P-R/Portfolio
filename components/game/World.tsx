@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, memo, useState, useCallback } from "react";
+import React, { Suspense, useEffect, memo, useState, useCallback, useMemo } from "react";
 import * as THREE from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 import { AdaptiveEvents, PerformanceMonitor, KeyboardControls, Environment, Stars, Instances, Instance } from "@react-three/drei";
@@ -15,6 +15,8 @@ import { getDeviceProfile } from "@/lib/deviceTier";
 import { useQualityStore } from "@/store/useQualityStore";
 import { GameLoadingScreen } from "./GameLoadingScreen";
 import { Effects } from "./Effects";
+import { getGroundTexture } from "@/lib/groundTexture";
+
 
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
 const Maze = React.lazy(() => import("./Maze").then(mod => ({ default: mod.Maze })));
@@ -32,7 +34,8 @@ const keyboardMap = [
     { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
     { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
     { name: 'right', keys: ['ArrowRight', 'KeyD'] },
-    { name: 'boost', keys: ['Space'] },
+    { name: 'boost', keys: ['KeyT', 't', 'ShiftLeft', 'ShiftRight'] },
+    { name: 'drift', keys: ['Space'] },
     { name: 'reset', keys: ['KeyR', 'r'] },
 ];
 
@@ -51,6 +54,75 @@ function WorldFallback() {
 }
 
 
+function GroundMaterial() {
+    const profile = useQualityStore(s => s.profile)!
+    const groundTex = useMemo(() => {
+        if (typeof window === 'undefined') return null
+        return getGroundTexture()
+    }, [])
+
+    return (
+        <meshStandardMaterial
+            map={groundTex ?? undefined}
+            color="#888888"
+            roughness={0.95}
+            metalness={0.0}
+            envMapIntensity={0.0}
+        />
+    )
+}
+
+function LampPosts({ positions }: { positions: [number, number, number][] }) {
+    const profile = useQualityStore(s => s.profile)!
+
+    return (
+        <group>
+            <Instances castShadow limit={50}>
+                <cylinderGeometry args={[0.05, 0.07, 3.5, 6]} />
+                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
+                {positions.map((pos, i) => <Instance key={`lamp1-${i}`} position={pos} />)}
+            </Instances>
+            <Instances limit={50}>
+                <boxGeometry args={[0.1, 0.1, 0.6]} />
+                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
+                {positions.map((pos, i) => <Instance key={`lamp2-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.3]} />)}
+            </Instances>
+
+            {/* The Bulbs */}
+            {positions.map((pos, i) => (
+                <group key={`bulb-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]}>
+                    <mesh>
+                        <sphereGeometry args={[0.12, 8, 8]} />
+                        {profile.isMobile ? (
+                            <meshStandardMaterial color="#ffe8a0" emissive="#ffe8a0" emissiveIntensity={0.8} />
+                        ) : (
+                            <meshBasicMaterial color={new THREE.Color(3.5, 2.8, 1.2)} toneMapped={false} />
+                        )}
+                    </mesh>
+
+                    {/* Halo disc — PC only */}
+                    {!profile.isMobile && (
+                        <mesh rotation={[Math.PI / 2, 0, 0]}>
+                            <circleGeometry args={[0.7, 10]} />
+                            <meshBasicMaterial
+                                color={new THREE.Color(2, 1.6, 0.6)}
+                                transparent
+                                opacity={0.1}
+                                depthWrite={false}
+                                toneMapped={false}
+                                side={THREE.DoubleSide}
+                            />
+                        </mesh>
+                    )}
+
+                    {/* Point light */}
+                    <pointLight color="#aaffcc" intensity={profile.isMobile ? 1.5 : 2.5} distance={12} decay={2} castShadow={false} />
+                </group>
+            ))}
+        </group>
+    )
+}
+
 function WorldEnvironment() {
     // Tree clusters — scattered naturally around edges
     const TREE_POSITIONS: [number, number, number][] = [
@@ -66,26 +138,26 @@ function WorldEnvironment() {
         [90, 0, -60], [-90, 0, 60],
     ]
 
-// Rocks — scattered between trees
-const ROCK_POSITIONS: [number, number, number][] = [
-    [22, 0, 15], [-15, 0, -20], [40, 0, 10],
-    [-35, 0, 45], [60, 0, -20], [-55, 0, 30],
-    [10, 0, 50], [-10, 0, -55], [75, 0, 20],
-]
+    // Rocks — scattered between trees
+    const ROCK_POSITIONS: [number, number, number][] = [
+        [22, 0, 15], [-15, 0, -20], [40, 0, 10],
+        [-35, 0, 45], [60, 0, -20], [-55, 0, 30],
+        [10, 0, 50], [-10, 0, -55], [75, 0, 20],
+    ]
 
-function SolidRock({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
-    return (
-        <RigidBody type="fixed" colliders={false} position={position}>
-            <CuboidCollider args={[0.55 * scale, 0.3 * scale, 0.5 * scale]} />
-            <mesh castShadow scale={scale}>
-                <dodecahedronGeometry args={[0.6, 0]} />
-                <meshStandardMaterial color="#1a2a20" roughness={0.9} />
-            </mesh>
-        </RigidBody>
-    )
-}
+    function SolidRock({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
+        return (
+            <RigidBody type="fixed" colliders={false} position={position}>
+                <CuboidCollider args={[0.55 * scale, 0.3 * scale, 0.5 * scale]} />
+                <mesh castShadow scale={scale}>
+                    <dodecahedronGeometry args={[0.6, 0]} />
+                    <meshStandardMaterial color="#1a2a20" roughness={0.9} />
+                </mesh>
+            </RigidBody>
+        )
+    }
 
-// Lamp posts — along the roads
+    // Lamp posts — along the roads
     const LAMP_POSITIONS: [number, number, number][] = [
         [4, 0, 20], [-4, 0, 20],
         [4, 0, -20], [-4, 0, -20],
@@ -104,10 +176,10 @@ function SolidRock({ position, scale = 1 }: { position: [number, number, number]
                 <CuboidCollider args={[200, 0.1, 200]} position={[0, -0.1, 0]} />
             </RigidBody>
 
-            {/* Main ground plane — solid color, no grid */}
+            {/* Main ground plane — procedural concrete */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
                 <planeGeometry args={[400, 400]} />
-                <meshStandardMaterial color="#0a1a12" roughness={0.95} metalness={0.0} />
+                <GroundMaterial />
             </mesh>
 
             {/* Road markings */}
@@ -156,21 +228,7 @@ function SolidRock({ position, scale = 1 }: { position: [number, number, number]
             })}
 
             {/* INSTANCED LAMP POSTS */}
-            <Instances castShadow limit={50}>
-                <cylinderGeometry args={[0.05, 0.07, 3.5, 6]} />
-                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
-                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp1-${i}`} position={pos} />)}
-            </Instances>
-            <Instances limit={50}>
-                <boxGeometry args={[0.1, 0.1, 0.6]} />
-                <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
-                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp2-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.3]} />)}
-            </Instances>
-            <Instances limit={50}>
-                <sphereGeometry args={[0.12, 8, 8]} />
-                <meshBasicMaterial color="#aaffcc" />
-                {LAMP_POSITIONS.map((pos, i) => <Instance key={`lamp3-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} />)}
-            </Instances>
+            <LampPosts positions={LAMP_POSITIONS} />
 
             {/* Lamp Post Physics */}
             {LAMP_POSITIONS.map((pos, i) => (
@@ -184,11 +242,6 @@ function SolidRock({ position, scale = 1 }: { position: [number, number, number]
                 <RigidBody key={`tree-phys-${i}`} type="fixed" position={[pos[0], pos[1] + 0.6, pos[2]]}>
                     <CuboidCollider args={[0.2, 0.6, 0.2]} />
                 </RigidBody>
-            ))}
-
-            {/* LAMP POST LIGHTS */}
-            {LAMP_POSITIONS.map((pos, i) => (
-                <pointLight key={`light-${i}`} position={[pos[0], pos[1] + 1.8, pos[2] + 0.55]} color="#aaffcc" intensity={1.5} distance={12} decay={2} />
             ))}
 
             {/* Boundary walls — invisible physics, visible as low hedges */}
@@ -237,126 +290,219 @@ function SolidRock({ position, scale = 1 }: { position: [number, number, number]
 }
 
 function GameCanvas({ children }: { children: React.ReactNode }) {
-  const profile = useQualityStore(s => s.profile)!
-  const [dpr, setDpr] = useState(profile.dpr)
+    const profile = useQualityStore(s => s.profile)!
+    const [dpr, setDpr] = useState(profile.dpr)
 
-  return (
-    <Canvas
-      dpr={dpr}
-      shadows={profile.shadows}
-      gl={{
-        antialias:           false,
-        powerPreference:     'high-performance',
-        stencil:             false,
-        alpha:               false,
-        toneMapping:         THREE.ACESFilmicToneMapping,
-        // VISUAL FIX: Exposure boost — was 1.0/1.1, now per-tier
-        toneMappingExposure: profile.tier === 'high' ? 1.3 : profile.tier === 'mid' ? 1.2 : 1.1,
-        outputColorSpace:    THREE.SRGBColorSpace,
-      }}
-      onCreated={({ gl }) => {
-        gl.shadowMap.enabled = profile.shadows
-        gl.shadowMap.type    = profile.shadows
-          ? THREE.PCFSoftShadowMap
-          : THREE.BasicShadowMap
-      }}
-      camera={{ position: [0, 8, 12], fov: 58, near: 0.3, far: profile.tier === 'low' ? 150 : 300 }}
-      performance={{ min: 0.4 }}
-    >
-      <AdaptiveEvents />
-      <PerformanceMonitor
-        bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
-        onDecline={() => setDpr(d => {
-          // VISUAL FIX: Minimum DPR floor on mobile — never go below 0.85 on phone
-          const minDPR = profile.isMobile ? 0.85 : 1.0;
-          return Math.max(minDPR, d - 0.1);
-        })}
-        onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
-        onFallback={() => setDpr(profile.isMobile ? 0.5 : 1.0)}
-      />
-      <FrameloopManager />
-      {children}
-    </Canvas>
-  )
+    // ── MOBILE: exactly as it was before ──────────────────────────────────
+    if (profile.isMobile) {
+        return (
+            <Canvas
+                dpr={dpr}
+                shadows={profile.shadows}
+                gl={{
+                    antialias: false,
+                    powerPreference: 'high-performance',
+                    stencil: false,
+                    alpha: false,
+                }}
+                onCreated={({ gl }) => {
+                    gl.shadowMap.enabled = profile.shadows
+                    gl.shadowMap.type = THREE.PCFSoftShadowMap
+                }}
+                camera={{ fov: 58, near: 0.3, far: 200 }}
+                performance={{ min: 0.4 }}
+            >
+                <AdaptiveEvents />
+                <PerformanceMonitor
+                    bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
+                    onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
+                    onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
+                    onFallback={() => setDpr(0.5)}
+                />
+                <FrameloopManager />
+                {children}
+            </Canvas>
+        )
+    }
+
+    // ── DESKTOP: upgraded renderer ────────────────────────────────────────
+    return (
+        <Canvas
+            dpr={dpr}
+            shadows="soft"
+            gl={{
+                antialias: false,
+                powerPreference: 'high-performance',
+                stencil: false,
+                alpha: false,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                toneMappingExposure: 1.15,
+                outputColorSpace: THREE.SRGBColorSpace,
+                logarithmicDepthBuffer: false,
+            }}
+            onCreated={({ gl }) => {
+                gl.shadowMap.enabled = true
+                gl.shadowMap.type = THREE.PCFSoftShadowMap
+                gl.shadowMap.autoUpdate = true
+                gl.capabilities.getMaxAnisotropy()
+            }}
+            camera={{ fov: 55, near: 0.3, far: 400 }}
+            performance={{ min: 0.5 }}
+        >
+            <AdaptiveEvents />
+            <PerformanceMonitor
+                bounds={() => [48, 62]}
+                onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
+                onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
+                onFallback={() => setDpr(1.0)}
+                flipflops={4}
+            />
+            <FrameloopManager />
+            {children}
+        </Canvas>
+    )
+}
+
+function SceneFog() {
+    const profile = useQualityStore(s => s.profile)!
+    const { scene } = useThree()
+
+    useEffect(() => {
+        if (profile.isMobile) {
+            // Mobile keeps linear fog exactly as before
+            if (profile.fog) {
+                scene.fog = new THREE.Fog('#0d1520', 40, 200)
+            }
+        } else {
+            // Desktop: cinematic exponential fog
+            scene.fog = new THREE.FogExp2(0x0a1510, 0.003)
+            scene.background = new THREE.Color(0x020608)
+        }
+        return () => { scene.fog = null }
+    }, [scene, profile.isMobile, profile.fog])
+
+    return null
 }
 
 function SceneLights() {
-  const profile = useQualityStore(s => s.profile)!
+    const profile = useQualityStore(s => s.profile)!
 
-  return (
-    <>
-      {/* VISUAL FIX: Background is dark navy */}
-      <color attach="background" args={['#0a0f1a']} />
-      <directionalLight
-        position={[40, 60, 20]}
-        intensity={2.52}
-        color="#c8e8ff"
-        castShadow={profile.shadows}
-        shadow-mapSize={[profile.shadowMapSize, profile.shadowMapSize]}
-        shadow-camera-near={1}
-        shadow-camera-far={profile.tier === 'high' ? 120 : 80}
-        shadow-camera-left={-60}  shadow-camera-right={60}
-        shadow-camera-top={60}    shadow-camera-bottom={-60}
-        shadow-bias={-0.0003}
-        shadow-normalBias={0.02}
-      />
-      <directionalLight position={[-30, 8, 40]} intensity={0.49} color="#ff9944" castShadow={false} />
-      {profile.tier !== 'low' && (
-        <directionalLight position={[-20, 15, -60]} intensity={0.7} color="#66aaff" castShadow={false} />
-      )}
-      {/* VISUAL FIX: Much brighter ambient — was too dark on all devices */}
-      <ambientLight intensity={profile.tier === 'high' ? 1.3 : profile.tier === 'mid' ? 1.1 : 0.9} />
-      {/* VISUAL FIX: Hemisphere sky/ground light boost — skyColor = color prop in THREE */}
-      <hemisphereLight args={['#b0c8ff', '#1a2a1a', 0.9]} />
-      {profile.tier !== 'low' && (
+    return (
         <>
-          <Stars radius={180} depth={50} count={profile.starCount} factor={3} saturation={0.8} fade speed={0.3} />
-          {/* DESKTOP PERF FIX: Environment resolution — three-tier: high=128, mid=64, low=32 */}
-          <Environment preset="night" background={false} resolution={profile.tier === 'high' ? 128 : profile.tier === 'mid' ? 64 : 32} />
+            {/* Fog — desktop gets FogExp2, mobile keeps linear */}
+            <SceneFog />
+
+            {/* Background color (mobile fallback, desktop overridden by SceneFog) */}
+            <color attach="background" args={[profile.isMobile ? '#0a0f1a' : '#020608']} />
+
+            {/* ── KEY LIGHT — cool moonlight ── */}
+            <directionalLight
+                position={[40, 60, 20]}
+                intensity={profile.isMobile ? 2.52 : 2.4}
+                color={profile.isMobile ? '#c8e8ff' : '#e8f0ff'}
+                castShadow={profile.shadows}
+                shadow-mapSize={[
+                    profile.isMobile ? profile.shadowMapSize : 2048,
+                    profile.isMobile ? profile.shadowMapSize : 2048,
+                ]}
+                shadow-camera-near={1}
+                shadow-camera-far={profile.isMobile ? 80 : 150}
+                shadow-camera-left={-80} shadow-camera-right={80}
+                shadow-camera-top={80} shadow-camera-bottom={-80}
+                shadow-bias={-0.0003}
+                shadow-normalBias={0.02}
+            />
+
+            {/* ── FILL LIGHT — warm amber ── */}
+            {profile.isMobile ? (
+                <directionalLight position={[-30, 8, 40]} intensity={0.49} color="#ff9944" castShadow={false} />
+            ) : (
+                <directionalLight position={[-30, 8, 40]} intensity={0.6} color="#ffcc88" castShadow={false} />
+            )}
+
+            {/* ── RIM LIGHT — blue back separation ── */}
+            {!profile.isMobile && (
+                <directionalLight position={[-20, 15, -60]} intensity={0.7} color="#6699ff" castShadow={false} />
+            )}
+            {profile.isMobile && profile.tier !== 'low' && (
+                <directionalLight position={[-20, 15, -60]} intensity={0.7} color="#66aaff" castShadow={false} />
+            )}
+
+            {/* ── AMBIENT ── */}
+            <ambientLight
+                intensity={profile.isMobile
+                    ? (profile.tier === 'high' ? 1.3 : profile.tier === 'mid' ? 1.1 : 0.9)
+                    : 0.45
+                }
+                color={profile.isMobile ? '#ffffff' : '#c8d8e0'}
+            />
+
+            {/* ── HEMISPHERE ── */}
+            <hemisphereLight
+                args={[
+                    profile.isMobile ? '#b0c8ff' : '#334466',
+                    profile.isMobile ? '#1a2a1a' : '#1a3020',
+                    0.85,
+                ]}
+            />
+
+            {/* ── STARS ── */}
+            {!profile.isMobile && (
+                <Stars radius={200} depth={60} count={3000} factor={3.5} saturation={0.9} fade speed={0.2} />
+            )}
+            {profile.isMobile && profile.tier !== 'low' && (
+                <Stars radius={180} depth={50} count={profile.starCount} factor={3} saturation={0.8} fade speed={0.3} />
+            )}
+
+            {/* ── ENV MAP — PC gets 512 for richer reflections ── */}
+            <Environment
+                preset="night"
+                background={false}
+                resolution={profile.isMobile
+                    ? (profile.tier === 'high' ? 128 : profile.tier === 'mid' ? 64 : 32)
+                    : 512
+                }
+            />
         </>
-      )}
-      {/* VISUAL FIX: Fog lightened so far objects aren't invisible */}
-      {profile.fog && <fog attach="fog" args={['#0d1520', 40, 200]} />}
-    </>
-  )
+    )
 }
 
 function AdaptivePhysics({ children }: { children: React.ReactNode }) {
-  const profile = useQualityStore(s => s.profile)!
+    const profile = useQualityStore(s => s.profile)!
 
-  return (
-    <Physics
-      gravity={[0, -9.81, 0]}
-      timeStep={1 / profile.physicsHz}
-      interpolate
-      colliders={false}
-    >
-      {children}
-    </Physics>
-  )
+    return (
+        <Physics
+            gravity={[0, -9.81, 0]}
+            timeStep={profile.isMobile ? (1 / profile.physicsHz) : (1 / 120)}
+            interpolate
+            colliders={false}
+        >
+            {children}
+        </Physics>
+    )
 }
 
 export function World() {
-  const setProfile = useQualityStore(s => s.setProfile)
-  const profile = useQualityStore(s => s.profile)
-  const [ready, setReady] = useState(false)
+    const setProfile = useQualityStore(s => s.setProfile)
+    const profile = useQualityStore(s => s.profile)
+    const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    getDeviceProfile().then(p => {
-      setProfile(p)
-      setReady(true)
-    })
-  }, [setProfile])
+    useEffect(() => {
+        getDeviceProfile().then(p => {
+            setProfile(p)
+            setReady(true)
+        })
+    }, [setProfile])
 
-  if (!ready || !profile) return <GameLoadingScreen progress={0} message="Detecting device..." />
+    if (!ready || !profile) return <GameLoadingScreen progress={0} message="Detecting device..." />
 
-  return <GameWorld />
+    return <GameWorld />
 }
 
 // LAZY LOAD FIX: Signals when the scene has mounted inside the Canvas
 function SceneReadyNotifier({ onReady }: { onReady: () => void }) {
-  useEffect(() => { onReady() }, [onReady])
-  return null
+    useEffect(() => { onReady() }, [onReady])
+    return null
 }
 
 function GameWorld() {
@@ -374,43 +520,42 @@ function GameWorld() {
                         position: 'absolute',
                         inset: 0,
                     }}>
-                    <GameCanvas>
-                        {/* Scene */}
-                        <SceneReadyNotifier onReady={handleReady} />
-                        <SceneLights />
-                        <Effects />
+                        <GameCanvas>
+                            {/* Scene */}
+                            <SceneReadyNotifier onReady={handleReady} />
+                            <SceneLights />
+                            <Effects />
 
-                        {/* Physics */}
-                        <AdaptivePhysics>
-                            {/* Ground first — synchronous */}
-                            <WorldEnvironment />
+                            {/* Physics */}
+                            <AdaptivePhysics>
+                                {/* Ground first — synchronous */}
+                                <WorldEnvironment />
 
-                            {/* Car — synchronous (procedural mesh, no GLB) */}
-                            <Car />
+                                <Car />
 
-                            {/* Football */}
-                            <Football />
-                            <GoalPost />
-                            <GoalCelebration />
+                                {/* Football */}
+                                <Football />
+                                <GoalPost />
+                                <GoalCelebration />
 
-                            {/* Corner Games & Ramp (Lazy Loaded) */}
-                            <Suspense fallback={null}>
-                                <BowlingZones />
-                                <MazeZone />
-                            </Suspense>
+                                {/* Corner Games & Ramp (Lazy Loaded) */}
+                                <Suspense fallback={null}>
+                                    <BowlingZones />
+                                    <MazeZone />
+                                </Suspense>
 
-                            {/* Trigger Zones */}
-                            {ZONES_ARRAY.map(zone => (
-                                <TriggerZone
-                                    key={zone.id}
-                                    position={zone.position}
-                                    zoneId={zone.id}
-                                    color={zone.color}
-                                    label={zone.label}
-                                />
-                            ))}
-                        </AdaptivePhysics>
-                    </GameCanvas>
+                                {/* Trigger Zones */}
+                                {ZONES_ARRAY.map(zone => (
+                                    <TriggerZone
+                                        key={zone.id}
+                                        position={zone.position}
+                                        zoneId={zone.id}
+                                        color={zone.color}
+                                        label={zone.label}
+                                    />
+                                ))}
+                            </AdaptivePhysics>
+                        </GameCanvas>
                     </div>
                 </KeyboardControls>
             </Suspense>
@@ -423,8 +568,13 @@ const BowlingZones = () => {
     const carPos = usePortfolioStore(s => s.carPos)
     const dist = (wx: number, wz: number) =>
         Math.sqrt((carPos.x - wx) ** 2 + (carPos.z - wz) ** 2)
-    const shouldRender = (wx: number, wz: number) =>
-        !profile.lazyLoadZones || dist(wx, wz) < 100
+    // PC: always render everything — no lazy loading
+    const shouldRender = (wx: number, wz: number): boolean => {
+        if (!profile.isMobile) return true
+        if (profile.tier === 'low') return dist(wx, wz) < 100
+        if (profile.tier === 'mid') return dist(wx, wz) < 120
+        return dist(wx, wz) < 160
+    }
 
     return shouldRender(-45, -45) ? (
         <Suspense fallback={null}>
@@ -438,8 +588,13 @@ const MazeZone = () => {
     const carPos = usePortfolioStore(s => s.carPos)
     const dist = (wx: number, wz: number) =>
         Math.sqrt((carPos.x - wx) ** 2 + (carPos.z - wz) ** 2)
-    const shouldRender = (wx: number, wz: number) =>
-        !profile.lazyLoadZones || dist(wx, wz) < 100
+    // PC: always render everything — no lazy loading
+    const shouldRender = (wx: number, wz: number): boolean => {
+        if (!profile.isMobile) return true
+        if (profile.tier === 'low') return dist(wx, wz) < 100
+        if (profile.tier === 'mid') return dist(wx, wz) < 120
+        return dist(wx, wz) < 160
+    }
 
     return shouldRender(-110, 110) ? (
         <Suspense fallback={null}>

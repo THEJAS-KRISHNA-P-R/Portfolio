@@ -19,6 +19,12 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
   title: "Thejas Krishna P R | 3D Portfolio",
   description: "Full-Stack Developer & CS Student. Drive around my interactive 3D portfolio.",

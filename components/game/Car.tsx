@@ -3,12 +3,13 @@
 import { useRef, useEffect, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useKeyboardControls, useGLTF } from "@react-three/drei";
-import { RigidBody, RapierRigidBody, CuboidCollider, useRapier } from "@react-three/rapier";
-import * as THREE from "three";
+import { RigidBody, CuboidCollider, type RapierRigidBody, useRapier } from '@react-three/rapier'
+import * as THREE from 'three'
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { mobileInput } from "@/components/game/MobileControls";
 import { getProfileSync } from "@/lib/deviceTier";
 import { getCarBodyMaterial } from "@/lib/materials";
+import { DriftSmoke } from "./DriftSmoke";
 
 // ── Rocket League Tuning ─────────────────────────────────────────────────────
 const TOP_SPEED = 18
@@ -28,9 +29,10 @@ const BOOST_DRIVE_TO_RECHARGE = 4.0
 
 const ACCEL_RAMP_UP_TIME = 1.5 // Time to reach full acceleration
 
-// Powerslide
-const DRIFT_LATERAL_KEEP = 0.4; // how much lateral velocity to keep during drift (0=full grip, 1=ice)
-const NORMAL_LATERAL_KEEP = 0.05; // very tight grip normally
+// Powerslide / Drift
+const DRIFT_LATERAL_KEEP = 0.65   // how much sideways vel survives (unused directly now)
+const NORMAL_LATERAL_KEEP = 0.04   // grip — 96% of lateral killed per frame
+const DRIFT_COUNTER_TORQUE = 160;  // magnitude for yaw scaling
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Maze mode flag: disables R-key reset while inside maze ─────────────────
@@ -41,11 +43,24 @@ let _infiniteBoost = false
 let _maxSpeedActive = false
 let _maxSpeedTimer = 0
 
+// ── Scratch Objects for zero-allocation performance ────────────────────────
+const _carQuat = new THREE.Quaternion()
+const _euler = new THREE.Euler()
+const _rightDir = new THREE.Vector3()
+const _forwardDir = new THREE.Vector3()
+const _vel3 = new THREE.Vector3()
+const _camOffset = new THREE.Vector3()
+const _carPos = new THREE.Vector3()
+const _vec3 = new THREE.Vector3()
+
 // ── Shared game state — plain object, never in Zustand ─────────────────────
 // Write here in useFrame (60fps), read by HUD/TurboVignette at 10-20fps poll.
+
+
 export const gameState = {
     speed: 0,        // raw m/s (unsigned)
     turboCharge: 0,  // 0..1
+    drifting: false, // true when drift key is held and car is moving
 }
 
 export function Car() {
@@ -55,26 +70,30 @@ export function Car() {
     const [ready, setReady] = useState(false);
     const [showFlames, setShowFlames] = useState(false);
     const cameraTarget = useRef(new THREE.Vector3());
+
+    // State
     const currentSpeed = useRef(0);
-    const forwardDriveTime = useRef(0); // For linear acceleration ramp
-
-    // Deterministic rotation
     const yaw = useRef(0);
-    const steerAngle = useRef(0)   // current physical wheel angle in radians
-    const steerInput = useRef(0)   // keep this for any visual use (wheel animation etc)
-    const smoothedSteerInput = useRef(0) // low-pass filter for thumb jitters
-
-    // Speed trails
+    const steerAngle = useRef(0);
+    const isAccelerating = useRef(false);
+    const steerInput = useRef(0);
+    const smoothedSteerInput = useRef(0);
+    const boostActive = useRef(false);
+    const boostCharge = useRef(100);
     const trailPositions = useRef<THREE.Vector3[]>([]);
+    const forwardDriveTime = useRef(0);
+
+    // NEW: Drift & Turbo state
+    const drifting = useRef(false);
+    const driftIntensity = useRef(0);
+    const prevBoostKey = useRef(false);
+    const turboTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Spawn cinematic
     const spawning = useRef(true);
     const spawnTimer = useRef(0);
     const SPAWN_DURATION = 1.5;
 
-    // Turbo state
-    const boostCharge = useRef(1.0);
-    const boostActive = useRef(false);
     const boostTimer = useRef(0);
     const driveTimeAccum = useRef(0);
 
@@ -112,7 +131,7 @@ export function Car() {
                 { x: 0, y: Math.sin(halfAngle), z: 0, w: Math.cos(halfAngle) },
                 true
             );
-            
+
             // Sync internal yaw state
             yaw.current = rotationY;
 
@@ -120,14 +139,15 @@ export function Car() {
             currentSpeed.current = 0;
             forwardDriveTime.current = 0;
 
+
             // CONTROL DRIFT FIX: Clear all mobile input state on teleport/reset
             mobileInput.forward = false;
-            mobileInput.brake   = false;
+            mobileInput.brake = false;
             mobileInput.backward = false;
-            mobileInput.left    = false;
-            mobileInput.right   = false;
-            mobileInput.boost   = false;
-            mobileInput.steerX  = 0;
+            mobileInput.left = false;
+            mobileInput.right = false;
+            mobileInput.boost = false;
+            mobileInput.steerX = 0;
             mobileInput.throttleY = 0;
         };
 
@@ -142,7 +162,7 @@ export function Car() {
             const pos = body.translation();
             const rot = body.rotation();
             const currentY = 2 * Math.atan2(rot.y, rot.w);
-            
+
             window.dispatchEvent(new CustomEvent('car:teleport', {
                 detail: { x: pos.x, y: pos.y + 2.5, z: pos.z, rotationY: currentY }
             }));
@@ -158,17 +178,27 @@ export function Car() {
         };
         window.addEventListener('game:freeze-controls', onFreeze);
 
+        const onInfiniteBoost = () => { _infiniteBoost = true; };
+        const onMaxSpeed = (e: Event) => {
+            _maxSpeedActive = true;
+            _maxSpeedTimer = (e as CustomEvent).detail?.duration ?? 30;
+        };
+
+        window.addEventListener('cheat:infinite-boost', onInfiniteBoost);
+        window.addEventListener('cheat:max-speed', onMaxSpeed);
+
         return () => {
             window.removeEventListener('car:reset', onReset);
             window.removeEventListener('game:freeze-controls', onFreeze);
+            window.removeEventListener('cheat:infinite-boost', onInfiniteBoost);
+            window.removeEventListener('cheat:max-speed', onMaxSpeed);
         }
-    }, []);
+    }, []); // Empty dependency array means this runs once on mount
 
     useFrame((state, delta) => {
         const body = carRef.current;
         if (!body) return;
 
-        // Hold in place until physics settles
         if (!ready) {
             body.setTranslation({ x: 0, y: 2, z: 0 }, true);
             body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -184,7 +214,6 @@ export function Car() {
             return;
         }
 
-        // ── Spawn cinematic ──────────────────────────────────────────────
         if (spawning.current) {
             spawnTimer.current += dt;
             const t = Math.min(spawnTimer.current / SPAWN_DURATION, 1);
@@ -197,45 +226,89 @@ export function Car() {
             return;
         }
 
-        const keys = getKeys()
+        const keys = getKeys();
 
-        // ── Merge keyboard + Bruno Simon one-finger touch ────────────────────────
+        // ── Input Muxing ─────────────────────────────────────────────────
         const isForward = keys.forward || mobileInput.forward;
-        const isBrake = keys.backward || mobileInput.backward;
-        const isBoost = keys.boost || mobileInput.boost;
+        const isBrake = keys.backward || mobileInput.brake || mobileInput.backward;
 
-        // Analog steer: proportional value from touch
         const targetSteerRaw = Math.abs(mobileInput.steerX) > 0.05
-            ? -mobileInput.steerX          // analog from touch
-            : (keys.left ? 1 : keys.right ? -1 : 0); // digital keyboard fallback
+            ? -mobileInput.steerX
+            : (keys.left ? 1 : keys.right ? -1 : 0);
 
-        // Low-pass filter to kill high-frequency thumb trembling
         smoothedSteerInput.current = THREE.MathUtils.lerp(
             smoothedSteerInput.current,
             targetSteerRaw,
-            1 - Math.exp(-15 * dt)
+            12 * dt
         );
 
         const steerInputRaw = smoothedSteerInput.current;
-
-        // Analog throttle from touch
         const touchThrottle = mobileInput.throttleY;
         const isForwardAnalog = isForward || touchThrottle > 0.15;
         const isBrakeAnalog = isBrake || touchThrottle < -0.15;
 
-        const shouldBoost = isBoost || mobileTurbo;
-        // ────────────────────────────────────────────────────────────────────────
+        // ── Boost Logic ──────────────────────────────────────────────────
+        if (!boostActive.current && boostCharge.current < 100) {
+            if (Math.abs(currentSpeed.current) > 1.0) {
+                driveTimeAccum.current += dt;
+                boostCharge.current = Math.min(100, (driveTimeAccum.current / BOOST_DRIVE_TO_RECHARGE) * 100);
+            }
+        }
 
-        // ── Cheat: max speed timer tick ──────────────────────────────────
+        const shouldBoost = keys.boost || mobileInput.turbo || mobileTurbo || _infiniteBoost;
+        const boostKeyEdge = shouldBoost && !prevBoostKey.current;
+        prevBoostKey.current = shouldBoost;
+
+        if (boostKeyEdge && (boostCharge.current >= 10 || _infiniteBoost) && !boostActive.current && Math.abs(currentSpeed.current) > 0.5) {
+            boostActive.current = true;
+            boostTimer.current = BOOST_DURATION;
+            // No longer resetting to 0 instantly! We'll drain it.
+            // if (!keys.shift && !_infiniteBoost) boostCharge.current = 0;
+            driveTimeAccum.current = 0;
+            setShowFlames(true);
+        }
+
+        if (_infiniteBoost && boostActive.current) {
+            boostTimer.current = BOOST_DURATION; // keep resetting
+        }
+
+        if (keys.shift && boostActive.current) {
+            boostCharge.current = Math.max(0, boostCharge.current - 25 * dt);
+            if (boostCharge.current <= 0) {
+                boostActive.current = false;
+                setShowFlames(false);
+            }
+        }
+
+        if (boostActive.current && !keys.shift) {
+            // Drain charge during one-shot boost (so it's not "instant")
+            if (!_infiniteBoost) {
+                boostCharge.current = Math.max(0, boostCharge.current - (100 / BOOST_DURATION) * dt);
+            }
+            boostTimer.current -= dt;
+            if (boostTimer.current <= 0) {
+                boostActive.current = false;
+                setShowFlames(false);
+            }
+        }
+
+        if (_infiniteBoost) {
+            boostCharge.current = 100;
+            if (!boostActive.current && Math.abs(currentSpeed.current) > 0.1) {
+                boostActive.current = true;
+                setShowFlames(true);
+            }
+        }
+
+        // ── Forward / Reverse Speed Math ─────────────────────────────────
+        const effectiveTopSpeed = _maxSpeedActive ? TOP_SPEED * 3 : TOP_SPEED;
+        const effectiveBoostSpeed = _maxSpeedActive ? BOOST_SPEED * 3 : BOOST_SPEED;
         if (_maxSpeedActive) {
             _maxSpeedTimer -= dt;
-            if (_maxSpeedTimer <= 0) { _maxSpeedActive = false; _maxSpeedTimer = 0; }
+            if (_maxSpeedTimer <= 0) _maxSpeedActive = false;
         }
-        const effectiveTopSpeed   = _maxSpeedActive ? TOP_SPEED * 3   : TOP_SPEED;
-        const effectiveBoostSpeed = _maxSpeedActive ? BOOST_SPEED * 3 : BOOST_SPEED;
 
-        // ── Speed ────────────────────────────────────────────────────────
-        const maxSpeed = boostActive.current ? effectiveBoostSpeed : effectiveTopSpeed;
+        const maxSpeed = _maxSpeedActive ? TOP_SPEED * 3.0 : (boostActive.current ? BOOST_SPEED : TOP_SPEED);
         const accel = boostActive.current ? BOOST_ACCEL : ACCEL;
 
         let targetSpeed = 0;
@@ -244,155 +317,138 @@ export function Car() {
             const rampProgress = Math.min(1.0, forwardDriveTime.current / ACCEL_RAMP_UP_TIME);
             const engineScale = Math.abs(mobileInput.throttleY) > 0.05 ? Math.abs(mobileInput.throttleY) : 1.0;
             targetSpeed = maxSpeed * engineScale * rampProgress;
-        }
-        else if (isBrakeAnalog) {
+        } else if (isBrakeAnalog) {
             forwardDriveTime.current = 0;
-            // If moving forward, backward = brake first
             if (currentSpeed.current > 1) {
-                targetSpeed = 0; // brake
+                targetSpeed = 0;
             } else {
                 const engineScale = Math.abs(mobileInput.throttleY) > 0.05 ? Math.abs(mobileInput.throttleY) : 1.0;
-                targetSpeed = -REVERSE_SPEED * engineScale; // reverse
+                targetSpeed = -REVERSE_SPEED * engineScale;
             }
         }
 
-        // Lerp speed
         if (isForwardAnalog || (isBrakeAnalog && currentSpeed.current <= 1)) {
             currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, accel);
         } else if (isBrakeAnalog && currentSpeed.current > 1) {
             currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, BRAKE);
         } else {
-            // Coasting — gentle deceleration
             forwardDriveTime.current = 0;
             currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, 0, COAST_DECEL);
         }
 
-        // Kill micro-drift
         if (!isForwardAnalog && !isBrakeAnalog && !boostActive.current && Math.abs(currentSpeed.current) < 0.1) {
             currentSpeed.current = 0;
         }
 
-        // ── Boost ────────────────────────────────────────────────────────
-        if (!boostActive.current && boostCharge.current < 1.0) {
-            if (Math.abs(currentSpeed.current) > 1.0) {
-                driveTimeAccum.current += dt;
-                boostCharge.current = Math.min(1.0, driveTimeAccum.current / BOOST_DRIVE_TO_RECHARGE);
-            }
+        if (_maxSpeedActive) {
+            currentSpeed.current = 45;
+            _maxSpeedTimer -= dt;
+            if (_maxSpeedTimer <= 0) _maxSpeedActive = false;
+            if (!showFlames) setShowFlames(true);
         }
 
-        if (shouldBoost && boostCharge.current >= 1.0 && !boostActive.current && Math.abs(currentSpeed.current) > 0.5) {
-            boostActive.current = true;
-            boostTimer.current = BOOST_DURATION;
-            boostCharge.current = 0.0;
-            driveTimeAccum.current = 0;
-            setShowFlames(true);
-        }
+        isAccelerating.current = isForward && currentSpeed.current > 0 && currentSpeed.current < targetSpeed - 1;
 
-        // Cheat: infinite boost — keep charge full and boost permanently active
-        if (_infiniteBoost) {
-            boostCharge.current = 1.0
-            if (!boostActive.current && Math.abs(currentSpeed.current) > 0.1) {
-                boostActive.current = true
-                setShowFlames(true)
-            }
-            if (boostActive.current) boostTimer.current = BOOST_DURATION // reset timer so it never expires
-        }
+        // ── Steering & Yaw ──────────────────────────────────────────────
+        const forwardSpeed = currentSpeed.current;
+        const turnRadius = WHEELBASE / Math.tan(MAX_STEER_ANGLE);
+        const isReversing = forwardSpeed < -0.1;
 
-        if (boostActive.current) {
-            boostTimer.current -= dt;
-            if (boostTimer.current <= 0) {
-                boostActive.current = false;
-                setShowFlames(false);
-            }
-        }
-
-        // ── Steering (Ackermann-style: yaw_rate = speed × steer / wheelbase) ──────
-        const absSpeed = Math.abs(currentSpeed.current);
-
-        // Steer ramp — use analog value directly, ramp only for keyboard
-        const targetAngle = steerInputRaw * MAX_STEER_ANGLE;
-
+        const effectiveSteerAngle = steerInputRaw * MAX_STEER_ANGLE;
         steerAngle.current = THREE.MathUtils.lerp(
             steerAngle.current,
-            targetAngle,
-            Math.abs(steerInputRaw) > 0.01
-                ? 1 - Math.exp(-STEER_SPEED * dt)    // snap toward target
-                : 1 - Math.exp(-STEER_RETURN * dt) // return to center
+            effectiveSteerAngle,
+            Math.abs(steerInputRaw) > 0.01 ? 1 - Math.exp(-STEER_SPEED * dt) : 1 - Math.exp(-STEER_RETURN * dt)
         );
+        steerAngle.current = THREE.MathUtils.clamp(steerAngle.current, -MAX_STEER_ANGLE, MAX_STEER_ANGLE);
 
-        // Clamp to max steer angle
-        steerAngle.current = THREE.MathUtils.clamp(
-            steerAngle.current,
-            -MAX_STEER_ANGLE,
-            MAX_STEER_ANGLE
-        )
+        const absSpeed = Math.abs(currentSpeed.current);
+        const speedDampening = Math.min(absSpeed / 1.5, 1.0);
+        const driveSign = currentSpeed.current >= 0 ? 1 : -1;
+        const smoothSign = driveSign * speedDampening;
+        const steerReduction = 1.0 / (1.0 + absSpeed * 0.10);
+        const effectiveSteer = steerAngle.current * steerReduction;
 
-        // KEY FORMULA: yaw_rate = (speed / wheelbase) × steerAngle
-        // At low speed → tiny yaw. At high speed → large yaw but wide radius.
+        const rawYawRate = (absSpeed / WHEELBASE) * effectiveSteer * smoothSign;
+        const MAX_YAW_RATE = 2.8;
+        const yawRate = THREE.MathUtils.clamp(rawYawRate, -MAX_YAW_RATE, MAX_YAW_RATE);
 
-        // Anti-jitter: gently blend the driveSign through zero rather than a harsh boolean flip.
-        // This prevents the car from violently shaking left/right when velocity hovers around 0.
-        const speedDampening = Math.min(absSpeed / 1.5, 1.0)
-        const driveSign = currentSpeed.current >= 0 ? 1 : -1
-        const smoothSign = driveSign * speedDampening
+        yaw.current += yawRate * dt;
+        steerInput.current = steerAngle.current / MAX_STEER_ANGLE;
 
-        // Speed-based steer reduction — at high speed, effective steer angle shrinks.
-        // Formula: 1/(1 + speed×0.12) → at speed=0: 100% steer, speed=18: ~32% steer
-        const steerReduction = 1.0 / (1.0 + absSpeed * 0.10) // Slightly less reduction for tighter turns at speed
-        const effectiveSteer = steerAngle.current * steerReduction
-
-        // Raw Ackermann yaw rate, then hard-capped
-        const rawYawRate = (absSpeed / WHEELBASE) * effectiveSteer * smoothSign
-        const MAX_YAW_RATE = 2.8 // Increased from 2.2 for snappier response
-        const yawRate = THREE.MathUtils.clamp(rawYawRate, -MAX_YAW_RATE, MAX_YAW_RATE)
-
-        // Apply yaw change
-        yaw.current += yawRate * dt
-
-        // Keep steerInput ref in sync for any UI/visual that reads it
-        steerInput.current = steerAngle.current / MAX_STEER_ANGLE  // normalize to [-1, 1]
-        // ─────────────────────────────────────────────────────────────────────────────
-
-        // Build quaternion from yaw and SET it directly — no angular velocity
-        const quatFromYaw = new THREE.Quaternion().setFromEuler(
-            new THREE.Euler(0, yaw.current, 0)
+        const quatFromYaw = _carQuat.setFromEuler(
+            _euler.set(0, yaw.current, 0)
         );
         body.setRotation(
             { x: quatFromYaw.x, y: quatFromYaw.y, z: quatFromYaw.z, w: quatFromYaw.w },
             true
         );
-        // Zero out angular velocity since we control rotation directly
         body.setAngvel({ x: 0, y: 0, z: 0 }, true);
 
-        // ── Velocity ─────────────────────────────────────────────────────
-        const forwardVec = new THREE.Vector3(0, 0, -1).applyQuaternion(quatFromYaw);
+        // ── VELOCITY & DRIFT ─────────────────────────────────────────────
+        const forwardVec = _forwardDir.set(0, 0, -1).applyQuaternion(quatFromYaw);
+
+        const wantsDrift = keys.drift || mobileInput.boost; // drift input
+        const isMoving = Math.abs(currentSpeed.current) > 2.0;
+
+        // Smooth drift intensity ramp — prevents instant snap on entry/exit
+        if (wantsDrift && isMoving) {
+            driftIntensity.current = Math.min(1.0, driftIntensity.current + dt * 5.0);
+        } else {
+            driftIntensity.current = Math.max(0.0, driftIntensity.current - dt * 4.0);
+        }
+
+        const di = driftIntensity.current;
+        const isDrifting = di > 0.15;
+        gameState.drifting = isDrifting;
+        ; (window as any).__driftIntensity = di;
+
+        // --- LATERAL VELOCITY MATHS ---
+        const rightVec = _rightDir.set(1, 0, 0).applyQuaternion(quatFromYaw);
+        const currentVel = body.linvel();
+        const velVec = _vel3.set(currentVel.x, 0, currentVel.z);
+        const lateralVel = rightVec.dot(velVec);   // how fast car slides sideways
+
+        // How much lateral velocity to KEEP:
+        // Normal grip:   keep 4% → tires cancel 96% sideways slip (sticky)
+        // Full drift:    keep 65% → rear floats, real slide feel
+        const lateralKeep = THREE.MathUtils.lerp(NORMAL_LATERAL_KEEP, DRIFT_LATERAL_KEEP, di);
+        const keptLateral = lateralVel * lateralKeep;
+
+        // YAW SPIN during drift:
+        // Instead of torque (which gets zeroed), directly add to yaw.current.
+        // This IS the rear breaking loose — the car rotates faster than its velocity.
+        if (di > 0.1 && Math.abs(steerAngle.current) > 0.05 && Math.abs(currentSpeed.current) > 2) {
+            // Spin rate: proportional to steer angle × drift intensity × speed
+            const spinRate = (steerAngle.current / MAX_STEER_ANGLE) * di * 1.8 * (Math.abs(currentSpeed.current) / TOP_SPEED);
+            yaw.current += spinRate * dt;
+        }
+
         const driveVel = forwardVec.multiplyScalar(currentSpeed.current);
 
-        // Lateral friction — Rocket League style
-        const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(quatFromYaw);
-        const currentVel = body.linvel();
-        const lateralVel = rightVec.dot(new THREE.Vector3(currentVel.x, 0, currentVel.z));
-        const isTurning = Math.abs(steerInputRaw) > 0.1;
-        const isDrifting = shouldBoost && isTurning; // powerslide during boost + turn
-        const lateralKeep = isDrifting ? DRIFT_LATERAL_KEEP : NORMAL_LATERAL_KEEP;
-
+        // Apply velocity: forward component + retained lateral
         body.setLinvel({
-            x: driveVel.x + rightVec.x * lateralVel * lateralKeep,
-            y: currentVel.y, // preserve gravity
-            z: driveVel.z + rightVec.z * lateralVel * lateralKeep,
+            x: driveVel.x + rightVec.x * keptLateral,
+            y: currentVel.y,  // preserve gravity
+            z: driveVel.z + rightVec.z * keptLateral,
         }, true);
 
         // Speed Trails
         if (Math.abs(currentSpeed.current) > 8) {
             const p = body.translation();
-            trailPositions.current.unshift(new THREE.Vector3(p.x, p.y - 0.2, p.z));
+            // Note: unshift creates a new object, this is okay for trails but we should be careful. 
+            // In a tight loop, cloning a scratch is better.
+            trailPositions.current.unshift(_vec3.set(p.x, p.y - 0.2, p.z).clone());
             if (trailPositions.current.length > 6) trailPositions.current.pop();
         }
 
         // ── Camera (Rocket League chase cam) ─────────────────────────────
         const pos = body.translation();
-        const carPos = new THREE.Vector3(pos.x, pos.y, pos.z);
-        const camOffset = new THREE.Vector3(0, 2.8, 5.5)
+
+
+
+        const carPos = _carPos.set(pos.x, pos.y, pos.z);
+        const camOffset = _camOffset.set(0, 2.8, 5.5)
             .applyQuaternion(quatFromYaw)
             .add(carPos);
         camOffset.y = Math.max(camOffset.y, pos.y + 1);
@@ -400,27 +456,25 @@ export function Car() {
         const camSpeed = boostActive.current ? 5.0 : 4.0;
         state.camera.position.lerp(camOffset, 1 - Math.exp(-camSpeed * dt));
         cameraTarget.current.lerp(
-            new THREE.Vector3(pos.x, pos.y + 0.4, pos.z),
+            _vec3.set(pos.x, pos.y + 0.4, pos.z),
             1 - Math.exp(-12 * dt)
         );
         state.camera.lookAt(cameraTarget.current);
 
-        // Boost FOV effect
         const cam = state.camera as THREE.PerspectiveCamera;
         const targetFOV = boostActive.current ? 78 : 55;
         cam.fov = THREE.MathUtils.lerp(cam.fov, targetFOV, 0.08);
         cam.updateProjectionMatrix();
 
-        // ── gameState (plain object — zero React overhead) ────────────────
+        // ── gameState ──────────────────────────────────────────────────
+        // Drive time & boost logic
         gameState.speed = Math.abs(currentSpeed.current);
         gameState.turboCharge = boostCharge.current;
 
-        // Update car position in store for lazy loading
         usePortfolioStore.getState().setCarPos({ x: pos.x, y: pos.y, z: pos.z });
 
-        // ── Fall recovery / Manual Reset ────────────────────────────────────────────────
+        // ── Fall recovery / Manual Reset ─────────────────────────────────
         if (pos.y < -2 || (keys.reset && !_inMaze)) {
-            // If manual reset (keys.reset), pop them UP slightly from their current XZ so they don't fall forever if stuck
             const newY = keys.reset ? Math.max(pos.y + 4, 2) : 2;
             const newX = keys.reset ? pos.x : 0;
             const newZ = keys.reset ? pos.z : 0;
@@ -428,15 +482,10 @@ export function Car() {
             body.setLinvel({ x: 0, y: 0, z: 0 }, true);
             body.setAngvel({ x: 0, y: 0, z: 0 }, true);
             currentSpeed.current = 0;
-            // CONTROL DRIFT FIX: Clear all input on fall recovery / manual reset
             mobileInput.forward = false;
-            mobileInput.brake   = false;
-            mobileInput.backward = false;
-            mobileInput.left    = false;
-            mobileInput.right   = false;
-            mobileInput.boost   = false;
-            mobileInput.steerX  = 0;
-            mobileInput.throttleY = 0;
+            mobileInput.brake = false;
+            mobileInput.boost = false;
+            mobileInput.turbo = false;
         }
     });
 
@@ -459,6 +508,7 @@ export function Car() {
                 {/* Low belly — reduced to prevent beaching on ramp approach */}
                 <CuboidCollider args={[0.58, 0.10, 1.17]} position={[0, -0.01, 0]} />
                 <TurboFlames visible={showFlames} />
+                <DriftSmoke />
                 <CarBody />
             </RigidBody>
             {trailPositions.current.map((pos, i) => (
@@ -474,6 +524,8 @@ export function Car() {
         </>
     );
 }
+
+
 
 function TurboFlames({ visible }: { visible: boolean }) {
     const flame1 = useRef<THREE.Mesh>(null);
@@ -546,28 +598,68 @@ function CarBody() {
         const c = scene.clone(true);
         c.traverse((child: any) => {
             if (!child.isMesh) return;
+            if (!child.material) return;
+
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             mats.forEach((mat: any, idx: number) => {
-                const m = mat.clone();
-                if (m.name === 'Material') {
-                    // Main body — vivid OrangeRed, matte metallic (not mirror)
-                    m.color.setStyle('#ff5500');
-                    m.metalness = bodyMat.metalness;
-                    m.roughness = bodyMat.roughness;
-                    m.envMapIntensity = bodyMat.envMapIntensity;
+                if (!mat) return;
+                let m = mat.clone();
+
+                // ── PC MATERIAL UPGRADE ──────────────────────────────────────
+                // StandardMaterial doesn't support clearcoat/transmission
+                // Upgrade to PhysicalMaterial on desktop for premium look
+                if (!prof.isMobile && (m as any).isMeshStandardMaterial) {
+                    const physMat = new THREE.MeshPhysicalMaterial();
+                    // Manually transfer core properties to avoid .copy() crash on hidden props
+                    physMat.color.copy(m.color);
+                    physMat.roughness = m.roughness;
+                    physMat.metalness = m.metalness;
+                    physMat.map = m.map;
+                    physMat.normalMap = m.normalMap;
+                    physMat.envMapIntensity = m.envMapIntensity;
+                    m = physMat;
+                }
+
+                if (m.name === 'Material' && m.color) {
+                    // Main body
+                    m.color.setStyle('#ff4000'); // Deeper orange-red
+                    if (prof.isMobile) {
+                        m.metalness = bodyMat.metalness;
+                        m.roughness = bodyMat.roughness;
+                        m.envMapIntensity = bodyMat.envMapIntensity;
+                    } else {
+                        m.metalness = 0.6;
+                        m.roughness = 0.1;
+                        m.envMapIntensity = 1.2;
+                        m.clearcoat = 1.0;
+                        m.clearcoatRoughness = 0.05;
+                    }
                 }
                 if (m.name === 'Material.003') {
                     // Glass
                     m.transparent = true;
-                    m.opacity = 0.42;
-                    m.roughness = 0.0;
-                    m.metalness = 0.1;
+                    if (prof.isMobile) {
+                        m.opacity = 0.42;
+                        m.roughness = 0.0;
+                        m.metalness = 0.1;
+                        m.envMapIntensity = 0.0;
+                    } else {
+                        m.opacity = 0.25;
+                        m.roughness = 0.0;
+                        m.metalness = 0.9;
+                        m.envMapIntensity = 1.5;
+                        m.transmission = 0.95;
+                        m.ior = 1.5;
+                        m.thickness = 0.1;
+                    }
                 }
                 if (m.name === 'Material.001') {
                     // Chrome
-                    m.metalness = 0.95;
-                    m.roughness = 0.05;
+                    m.metalness = 1.0;
+                    m.roughness = prof.isMobile ? 0.05 : 0.0;
+                    m.envMapIntensity = prof.isMobile ? 0.2 : 2.0;
                 }
+
                 if (Array.isArray(child.material)) {
                     child.material[idx] = m;
                 } else {

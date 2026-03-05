@@ -24,18 +24,18 @@ const PIN_VISUAL_SCALE = 0.35;
 const COL_HX = 0.07;   // half-width X
 const COL_HY = 0.30;   // half-height Y → full height 0.60 units
 const COL_HZ = 0.07;   // half-width Z
-const COL_Y  = 0.30;   // collider centre Y (= COL_HY, so base sits at 0)
+const COL_Y = 0.30;   // collider centre Y (= COL_HY, so base sits at 0)
 
 // Standard 10-pin triangle (relative offsets, Y=0 base)
 const PIN_POSITIONS: [number, number, number][] = [
     // Row 1 (closest to car approach)
-    [ 0,    0,  0   ],
+    [0, 0, 0],
     // Row 2
-    [-0.4,  0, -0.75],  [ 0.4, 0, -0.75],
+    [-0.4, 0, -0.75], [0.4, 0, -0.75],
     // Row 3
-    [-0.8,  0, -1.5 ],  [ 0,   0, -1.5 ],  [ 0.8, 0, -1.5 ],
+    [-0.8, 0, -1.5], [0, 0, -1.5], [0.8, 0, -1.5],
     // Row 4
-    [-1.2,  0, -2.25],  [-0.4, 0, -2.25],  [ 0.4, 0, -2.25],  [ 1.2, 0, -2.25],
+    [-1.2, 0, -2.25], [-0.4, 0, -2.25], [0.4, 0, -2.25], [1.2, 0, -2.25],
 ];
 
 // Single GLB instance, cloned per-pin inside useMemo
@@ -81,20 +81,20 @@ const BowlingPin = forwardRef<RapierRigidBody, { position: [number, number, numb
 BowlingPin.displayName = 'BowlingPin';
 
 // ─── Lane geometry ────────────────────────────────────────────────────────────
-const LW         = 3.8;   // playable lane width
-const GW         = 0.6;   // gutter channel width each side
-const WALL_H     = 0.55;  // outer bumper-wall height
-const WALL_T     = 0.12;  // wall thickness
-const LANE_SURF  = 0.008; // lane visual sits just above the physics ground
+const LW = 3.8;   // playable lane width
+const GW = 0.6;   // gutter channel width each side
+const WALL_H = 0.55;  // outer bumper-wall height
+const WALL_T = 0.12;  // wall thickness
+const LANE_SURF = 0.008; // lane visual sits just above the physics ground
 const Z_APPROACH = BOWLING_POS[2] + 24;   // -21 — far approach end (where car starts)
-const Z_PINDECK  = BOWLING_POS[2] - 6.0; // -51 — well behind the last pin row
-const LANE_LEN   = Z_APPROACH - Z_PINDECK; // ≈26.6
-const LANE_ZC    = (Z_APPROACH + Z_PINDECK) / 2;
-const CX         = BOWLING_POS[0];
+const Z_PINDECK = BOWLING_POS[2] - 6.0; // -51 — well behind the last pin row
+const LANE_LEN = Z_APPROACH - Z_PINDECK; // ≈26.6
+const LANE_ZC = (Z_APPROACH + Z_PINDECK) / 2;
+const CX = BOWLING_POS[0];
 
 // Seven targeting arrows; standard positions at ~15ft (≈4.6m) from foul line
-const ARROW_Z    = BOWLING_POS[2] + 8;
-const ARROW_XS   = [-3, -1.5, -0.75, 0, 0.75, 1.5, 3].map(o => CX + o * (LW / 6));
+const ARROW_Z = BOWLING_POS[2] + 8;
+const ARROW_XS = [-3, -1.5, -0.75, 0, 0.75, 1.5, 3].map(o => CX + o * (LW / 6));
 
 function BowlingLane() {
     return (
@@ -215,10 +215,10 @@ export const Bowling = memo(function Bowling() {
     const settleUntil = useRef<number>(0);
     // Populated after first render so performance.now() is safe client-side
     useEffect(() => { settleUntil.current = performance.now() + 2500; }, []);
-    const pinNotifTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const hitFlagRef        = useRef(false);
-    const debounceRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const strikeShownRef    = useRef(false);   // prevents firing game:clear twice
+    const strikeShownRef = useRef(false);   // prevents firing game:clear twice
+    const resetTimer = useRef(0);       // actual reset clock
+    const pinNotifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // COL_Y - COL_HY = 0.30 - 0.30 = 0 in local space, so collider bottom is exactly at
     // the RigidBody's world Y. Spawn at 0.005 to avoid exact-zero ground intersection.
@@ -248,18 +248,15 @@ export const Bowling = memo(function Bowling() {
             setPinsDown(0);
             setShowStrike(false);
             strikeShownRef.current = false;
+            resetTimer.current = 0;
             setIsResetting(false);
         }, 50);
     }, [pinWorldPositions]);
 
-    // Called on every pin's onCollisionEnter — debounced 5s sliding window
-    // Every new collision cancels + restarts the timer (last hit starts the clock)
+    // Handle achieving/scoring notification separately from the reset timer
     const onPinHit = useCallback(() => {
-        hitFlagRef.current = true;
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => {
-            // Score snapshot at reset time — pins have had 5s to settle
-            // Strike was already shown in useFrame; only handle non-strike notification here
+        if (pinNotifTimer.current) clearTimeout(pinNotifTimer.current);
+        pinNotifTimer.current = setTimeout(() => {
             let finalCount = 0;
             pinRefs.current.forEach(pin => {
                 if (!pin) return;
@@ -269,37 +266,56 @@ export const Bowling = memo(function Bowling() {
                 if (tilt > 0.52 || pos.y < -0.3) finalCount++;
             });
             if (finalCount < 10 && finalCount > 0) {
-                fireAchievement({ type: 'bowling', title: 'PINS DOWN', value: `${finalCount}/10`, subtext: finalCount >= 7 ? '🎳 Great shot!' : finalCount >= 4 ? 'Nice hit!' : 'Keep going!', color: '#ffcc00', duration: 2500 });
+                fireAchievement({
+                    type: 'bowling',
+                    title: 'PINS DOWN',
+                    value: `${finalCount}/10`,
+                    subtext: finalCount >= 7 ? '🎳 Great shot!' : finalCount >= 4 ? 'Nice hit!' : 'Keep going!',
+                    color: '#ffcc00',
+                    duration: 2500
+                });
             }
-            hitFlagRef.current  = false;
-            debounceRef.current = null;
-            resetPins();
-        }, 5000);
-    }, [resetPins]);
+            pinNotifTimer.current = null;
+        }, 2200); // Show score once pins settle a bit
+    }, []);
 
     useEffect(() => {
-        const h = () => resetPins();
-        window.addEventListener('resetBowlingPins', h);
-        // Cheat: auto-strike — smash all pins with a large impulse
         const onStrike = () => {
+            // knock all pins
             pinRefs.current.forEach(pin => {
                 if (!pin) return;
-                pin.applyImpulse({ x: (Math.random() - 0.5) * 0.5, y: 2.5, z: -4 }, true)
-                pin.applyTorqueImpulse({ x: (Math.random() - 0.5) * 2, y: 0, z: (Math.random() - 0.5) * 2 }, true)
-            })
+                pin.setLinvel(
+                    { x: (Math.random() - 0.5) * 4, y: 3, z: (Math.random() - 0.5) * 4 },
+                    true
+                );
+                pin.setAngvel(
+                    { x: Math.random() * 6, y: Math.random() * 6, z: Math.random() * 6 },
+                    true
+                );
+            });
         }
+
+        const h = () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(resetPins, 5000);
+        }
+
+        window.addEventListener('resetBowlingPins', h);
         window.addEventListener('cheat:auto-strike', onStrike);
+
         return () => {
             window.removeEventListener('resetBowlingPins', h);
             window.removeEventListener('cheat:auto-strike', onStrike);
+            if (pinNotifTimer.current) clearTimeout(pinNotifTimer.current);
             if (debounceRef.current) clearTimeout(debounceRef.current);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    useFrame(() => {
+    useFrame((_, dt) => {
         if (isResetting || pinRefs.current.length < 10) return;
         if (performance.now() < settleUntil.current) return;
+
         // HUD counter — and immediate strike detection as soon as all 10 are down
         let fallenCount = 0;
         pinRefs.current.forEach(pin => {
@@ -309,10 +325,22 @@ export const Bowling = memo(function Bowling() {
             const tilt = Math.abs(rot.x) + Math.abs(rot.z);
             if (tilt > 0.52 || pos.y < -0.3) fallenCount++;
         });
+
         if (fallenCount !== lastPinsDown.current) {
             lastPinsDown.current = fallenCount;
             setPinsDown(fallenCount);
         }
+
+        // AUTO-RESET TIMER: Triggered as soon as at least one pin is down
+        if (fallenCount > 0) {
+            resetTimer.current += dt;
+            if (resetTimer.current >= 5.0) {
+                resetPins();
+            }
+        } else {
+            resetTimer.current = 0;
+        }
+
         // Strike: show banner immediately when all 10 fall, don't wait for reset timer
         if (fallenCount === 10 && !strikeShownRef.current) {
             strikeShownRef.current = true;

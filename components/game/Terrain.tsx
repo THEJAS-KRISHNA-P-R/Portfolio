@@ -8,6 +8,33 @@ import * as THREE from "three";
 import { createNoise2D } from "simplex-noise";
 import { ZONES_ARRAY } from "@/lib/constants";
 import { theme } from "@/lib/theme";
+import { getGroundTexture } from "@/lib/groundTexture";
+
+function SandPatch({
+    position,
+    radius = 2.2,
+}: {
+    position: [number, number, number]
+    radius?: number
+}) {
+    return (
+        <mesh
+            position={[position[0], position[1] + 0.015, position[2]]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            renderOrder={2}
+        >
+            <circleGeometry args={[radius, 16]} />
+            <meshStandardMaterial
+                color="#b89a6a"      // sandy tan
+                roughness={0.98}
+                metalness={0}
+                transparent
+                opacity={0.85}
+                depthWrite={false}
+            />
+        </mesh>
+    )
+}
 
 // ── Height-map config ───────────────────────────────────────────────
 const TERRAIN_SIZE = 120;       // world units
@@ -140,7 +167,12 @@ export const Terrain = memo(function Terrain() {
         <>
             {/* Fix 0: Visual terrain mesh (no physics — just looks good) */}
             <mesh geometry={geometry} receiveShadow>
-                <meshStandardMaterial vertexColors roughness={0.85} />
+                <meshStandardMaterial
+                    vertexColors
+                    roughness={0.95}
+                    metalness={0.0}
+                    envMapIntensity={0.0}
+                />
             </mesh>
 
             {/* Flat physics ground — always at Y=0, large enough to cover entire world */}
@@ -182,6 +214,15 @@ export const Terrain = memo(function Terrain() {
                     />
                 ))}
             </Instances>
+
+            {/* 3.1 SAND PATCHES (around trees) */}
+            {trees.map((tree, i) => (
+                <SandPatch
+                    key={`sand-${i}`}
+                    position={[tree.position[0], tree.position[1], tree.position[2]]}
+                    radius={1.6 + (i % 4) * 0.3}
+                />
+            ))}
 
             {/* 4. BOULDERS (Instanced Visuals) */}
             <Instances castShadow receiveShadow limit={50}>

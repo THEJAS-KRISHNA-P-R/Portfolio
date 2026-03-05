@@ -124,19 +124,22 @@ export default function HUD() {
                     {displayTurbo >= 100 ? 'Turbo Ready' : `Charging ${Math.round(displayTurbo)}%`}
                 </span>
                 <div className="hud-turbo-bar" style={{
-                    width: 'clamp(80px, 20vw, 140px)',
-                    height: '3px',
-                    background: 'rgba(255,255,255,0.07)',
-                    borderRadius: '9999px',
+                    width: 'clamp(120px, 22vw, 220px)',
+                    height: '4px',
+                    background: 'rgba(255,255,255,0.08)',
+                    borderRadius: '2px',
+                    overflow: 'hidden',
                 }}>
                     <div style={{
                         height: '100%',
-                        width: `${Math.round(displayTurbo)}%`,
-                        borderRadius: '9999px',
+                        width: `${Math.min(displayTurbo, 100)}%`,
                         background: displayTurbo >= 100
                             ? '#00e676'
-                            : 'linear-gradient(to right, #ff6600, #ff9900)',
-                        transition: 'width 0.15s linear',
+                            : gameState.speed > 0.1 && (displayTurbo > 0)
+                                ? '#ff6600'
+                                : 'rgba(0,230,118,0.5)',
+                        borderRadius: '2px',
+                        transition: 'width 0.1s linear',
                     }} />
                 </div>
             </div>
@@ -165,7 +168,8 @@ export default function HUD() {
                         ['W / ↑', 'Accelerate'],
                         ['S / ↓', 'Brake'],
                         ['A D', 'Steer'],
-                        ['Space', 'Turbo'],
+                        ['Space', 'Drift'],
+                        ['T', 'Turbo'],
                     ] as [string, string][]).map(([key, label]) => (
                         <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
                             <span style={{

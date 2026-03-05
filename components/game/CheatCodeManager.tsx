@@ -47,7 +47,11 @@ export function CheatCodeManager() {
 
             for (const [code, cheat] of Object.entries(CHEAT_MAP)) {
                 if (buffer.current.endsWith(code)) {
-                    window.dispatchEvent(new CustomEvent(cheat.event))
+                    if (cheat.event === 'cheat:max-speed') {
+                        window.dispatchEvent(new CustomEvent(cheat.event, { detail: { duration: 30 } }))
+                    } else {
+                        window.dispatchEvent(new CustomEvent(cheat.event))
+                    }
                     fireNotif(cheat.notif)
                     buffer.current = ""
                     break
