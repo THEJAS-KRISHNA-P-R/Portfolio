@@ -38,7 +38,7 @@ export const mobileInput: MobileInput = {
 // Both clusters use IDENTICAL sizing — uniform feel.
 // ─────────────────────────────────────────────────────────────────────────────
 const BTN_SIZE = 72    // px base — uniform for ALL buttons
-const BTN_GAP = '8px' // gap between buttons in a cluster
+const BTN_GAP = '28px' // gap between buttons in a cluster
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GameButton — frosted glass, uniform size, proper touch handling
@@ -636,7 +636,7 @@ export function MobileControls() {
           {/* LEFT: Steer cluster */}
           <div style={{
             position: 'fixed',
-            bottom: `max(calc(env(safe-area-inset-bottom) + 28vh), 4rem)`,
+            bottom: `max(calc(env(safe-area-inset-bottom) + 24vh), 5rem)`,
             left: `calc(${CLUSTER_SIDE} + 4rem)`,
             zIndex: 250,
             display: 'flex',
@@ -661,7 +661,7 @@ export function MobileControls() {
           {/* RIGHT: Brake + Gas cluster */}
           <div style={{
             position: 'fixed',
-            bottom: `max(calc(env(safe-area-inset-bottom) + 28vh), 5rem)`,
+            bottom: `max(calc(env(safe-area-inset-bottom) + 24vh), 5rem)`,
             right: `calc(${CLUSTER_SIDE} + 4rem)`,
             zIndex: 250,
             display: 'flex',
