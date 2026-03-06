@@ -24,25 +24,25 @@ export interface GameNotifData {
 }
 
 const TYPE_COLOR: Record<GameNotifType, string> = {
-  goal:       '#00e676',
-  bowling:    '#ffcc00',
-  strike:     '#ffcc00',
+  goal: '#00e676',
+  bowling: '#ffcc00',
+  strike: '#ffcc00',
   maze_clear: '#00bfff',
-  maze_hit:   '#ff9944',
+  maze_hit: '#ff9944',
   maze_reset: '#ff3322',
-  record:     '#ffcc00',
-  info:       '#888888',
+  record: '#ffcc00',
+  info: '#888888',
 }
 
 const TYPE_ICON: Record<GameNotifType, string> = {
-  goal:       '⚽',
-  bowling:    '🎳',
-  strike:     '💥',
+  goal: '⚽',
+  bowling: '🎳',
+  strike: '💥',
   maze_clear: '🏁',
-  maze_hit:   '💢',
+  maze_hit: '💢',
   maze_reset: '🔄',
-  record:     '★',
-  info:       'ℹ',
+  record: '★',
+  info: 'ℹ',
 }
 
 // ── Global fire helper ────────────────────────────────────────────────────
@@ -73,24 +73,24 @@ function NotifToast({
   data: ToastEntry
   onDone: () => void
 }) {
-  const ref      = useRef<HTMLDivElement>(null)
-  const color    = data.color ?? TYPE_COLOR[data.type]
+  const ref = useRef<HTMLDivElement>(null)
+  const color = data.color ?? TYPE_COLOR[data.type]
   const duration = data.duration ?? 3500
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    el.style.opacity   = '0'
+    el.style.opacity = '0'
     el.style.transform = 'translateX(20px) scale(0.97)'
     const raf = requestAnimationFrame(() => {
       el.style.transition = 'opacity 0.3s ease, transform 0.3s cubic-bezier(0.22,1,0.36,1)'
-      el.style.opacity    = '1'
-      el.style.transform  = 'translateX(0) scale(1)'
+      el.style.opacity = '1'
+      el.style.transform = 'translateX(0) scale(1)'
     })
     const fadeId = setTimeout(() => {
       el.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
-      el.style.opacity    = '0'
-      el.style.transform  = 'translateX(12px) scale(0.97)'
+      el.style.opacity = '0'
+      el.style.transform = 'translateX(-12px) scale(0.97)'
     }, duration - 380)
     const doneId = setTimeout(onDone, duration)
     return () => {
@@ -186,18 +186,21 @@ export function GameNotifContainer() {
   return (
     <div style={{
       position: 'fixed',
-      // Responsive positioning: bottom-right on desktop, top-center on mobile
-      // We use CSS media query equivalent via inline clamp trick:
-      bottom: 'clamp(4.5rem, 8vh, 6rem)',
-      right: '0.75rem',
+      top: 'clamp(4.5rem, 10vh, 5.5rem)',
+      left: 'clamp(0.6rem, 2vw, 1rem)',
       zIndex: 400,
       display: 'flex',
-      flexDirection: 'column-reverse',
+      flexDirection: 'column',
       gap: '0.4rem',
       pointerEvents: 'none',
-      // Max width: on mobile constrain to not overflow
       width: 'min(260px, calc(100vw - 1.5rem))',
     }}>
+      <style>{`
+        @keyframes slideInLeft {
+          from { opacity: 0; transform: translateX(-20px) scale(0.97); }
+          to   { opacity: 1; transform: translateX(0) scale(1); }
+        }
+      `}</style>
       {toasts.map(t => (
         <NotifToast key={t.id} data={t} onDone={() => remove(t.id)} />
       ))}

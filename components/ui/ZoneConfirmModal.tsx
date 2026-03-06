@@ -55,24 +55,25 @@ export function ZoneConfirmModal() {
     const meta = ZONE_META[pendingZone.toLowerCase()] ?? DEFAULT_META
 
     return (
-        // Backdrop
+        // Backdrop — zIndex 600: above Canvas(1), turbo catcher(238), controls(250), settings(470)
         <div
-            onClick={handleDismiss}
+            onPointerDown={e => { if (e.target === e.currentTarget) handleDismiss() }}
             style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 200,
+                zIndex: 600,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 background: 'rgba(0,0,0,0.6)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
+                pointerEvents: 'auto',
             }}
         >
-            {/* Modal card — fixed size, click doesn't bubble to backdrop */}
+            {/* Modal card — fixed size, pointer events don't bubble to backdrop */}
             <div
-                onClick={e => e.stopPropagation()}
+                onPointerDown={e => e.stopPropagation()}
                 style={{
                     position: 'relative',
                     width: '360px',
@@ -123,7 +124,7 @@ export function ZoneConfirmModal() {
                     alignItems: 'center',
                     gap: '0.65rem',
                     fontFamily: "'JetBrains Mono', monospace",
-                    pointerEvents: 'none', // Let clicks/hovers pass through to the PixelCard background
+                    pointerEvents: 'none', // Buttons row below overrides with pointerEvents:'auto'
                 }}>
 
                     {/* Zone name */}
@@ -158,7 +159,7 @@ export function ZoneConfirmModal() {
                         margin: '0.3rem 0',
                     }} />
 
-                    {/* Buttons row */}
+                    {/* Buttons row — explicit pointerEvents so parent's 'none' doesn't block */}
                     <div style={{ display: 'flex', gap: '0.75rem', width: '100%', pointerEvents: 'auto' }}>
 
                         {/* Keep Driving — ghost */}

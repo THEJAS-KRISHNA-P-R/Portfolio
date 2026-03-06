@@ -34,8 +34,8 @@ const keyboardMap = [
     { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
     { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
     { name: 'right', keys: ['ArrowRight', 'KeyD'] },
-    { name: 'boost', keys: ['KeyT', 't', 'ShiftLeft', 'ShiftRight'] },
-    { name: 'drift', keys: ['Space'] },
+    { name: 'boost', keys: ['KeyT', 't', 'Space'] },
+    { name: 'drift', keys: ['ShiftLeft', 'ShiftRight'] },
     { name: 'reset', keys: ['KeyR', 'r'] },
 ];
 
@@ -296,70 +296,74 @@ function GameCanvas({ children }: { children: React.ReactNode }) {
     // ── MOBILE: exactly as it was before ──────────────────────────────────
     if (profile.isMobile) {
         return (
-            <Canvas
-                dpr={dpr}
-                shadows={profile.shadows}
-                gl={{
-                    antialias: false,
-                    powerPreference: 'high-performance',
-                    stencil: false,
-                    alpha: false,
-                }}
-                onCreated={({ gl }) => {
-                    gl.shadowMap.enabled = profile.shadows
-                    gl.shadowMap.type = THREE.PCFSoftShadowMap
-                }}
-                camera={{ fov: 58, near: 0.3, far: 200 }}
-                performance={{ min: 0.4 }}
-            >
-                <AdaptiveEvents />
-                <PerformanceMonitor
-                    bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
-                    onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
-                    onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
-                    onFallback={() => setDpr(0.5)}
-                />
-                <FrameloopManager />
-                {children}
-            </Canvas>
+            <div style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
+                <Canvas
+                    dpr={dpr}
+                    shadows={profile.shadows}
+                    gl={{
+                        antialias: false,
+                        powerPreference: 'high-performance',
+                        stencil: false,
+                        alpha: false,
+                    }}
+                    onCreated={({ gl }) => {
+                        gl.shadowMap.enabled = profile.shadows
+                        gl.shadowMap.type = THREE.PCFSoftShadowMap
+                    }}
+                    camera={{ fov: 58, near: 0.3, far: 200 }}
+                    performance={{ min: 0.4 }}
+                >
+                    <AdaptiveEvents />
+                    <PerformanceMonitor
+                        bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
+                        onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
+                        onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
+                        onFallback={() => setDpr(0.5)}
+                    />
+                    <FrameloopManager />
+                    {children}
+                </Canvas>
+            </div>
         )
     }
 
     // ── DESKTOP: upgraded renderer ────────────────────────────────────────
     return (
-        <Canvas
-            dpr={dpr}
-            shadows="soft"
-            gl={{
-                antialias: false,
-                powerPreference: 'high-performance',
-                stencil: false,
-                alpha: false,
-                toneMapping: THREE.ACESFilmicToneMapping,
-                toneMappingExposure: 1.15,
-                outputColorSpace: THREE.SRGBColorSpace,
-                logarithmicDepthBuffer: false,
-            }}
-            onCreated={({ gl }) => {
-                gl.shadowMap.enabled = true
-                gl.shadowMap.type = THREE.PCFSoftShadowMap
-                gl.shadowMap.autoUpdate = true
-                gl.capabilities.getMaxAnisotropy()
-            }}
-            camera={{ fov: 55, near: 0.3, far: 400 }}
-            performance={{ min: 0.5 }}
-        >
-            <AdaptiveEvents />
-            <PerformanceMonitor
-                bounds={() => [48, 62]}
-                onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
-                onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
-                onFallback={() => setDpr(1.0)}
-                flipflops={4}
-            />
-            <FrameloopManager />
-            {children}
-        </Canvas>
+        <div style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
+            <Canvas
+                dpr={dpr}
+                shadows="soft"
+                gl={{
+                    antialias: false,
+                    powerPreference: 'high-performance',
+                    stencil: false,
+                    alpha: false,
+                    toneMapping: THREE.ACESFilmicToneMapping,
+                    toneMappingExposure: 1.15,
+                    outputColorSpace: THREE.SRGBColorSpace,
+                    logarithmicDepthBuffer: false,
+                }}
+                onCreated={({ gl }) => {
+                    gl.shadowMap.enabled = true
+                    gl.shadowMap.type = THREE.PCFSoftShadowMap
+                    gl.shadowMap.autoUpdate = true
+                    gl.capabilities.getMaxAnisotropy()
+                }}
+                camera={{ fov: 55, near: 0.3, far: 400 }}
+                performance={{ min: 0.5 }}
+            >
+                <AdaptiveEvents />
+                <PerformanceMonitor
+                    bounds={() => [48, 62]}
+                    onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
+                    onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
+                    onFallback={() => setDpr(1.0)}
+                    flipflops={4}
+                />
+                <FrameloopManager />
+                {children}
+            </Canvas>
+        </div>
     )
 }
 
@@ -510,7 +514,7 @@ function GameWorld() {
     const handleReady = useCallback(() => setSceneReady(true), [])
 
     return (
-        <div className="absolute inset-0 w-full h-full" style={{ touchAction: 'none', zIndex: 1 }}>
+        <div className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }}>
             <Suspense fallback={<WorldFallback />}>
                 <KeyboardControls map={keyboardMap}>
                     {/* LAZY LOAD FIX: Crossfade from loader to scene — no hard flash */}

@@ -65,19 +65,14 @@ export function TriggerZone({ position, zoneId, color, label }: TriggerZoneProps
 
     const handleEnter = () => {
         setIsInside(true);
-        // Show confirm modal instead of opening section directly
-        if (!pendingZone) {
-            setTimeout(() => {
-                setPendingZone(zoneId);
-            }, 150);
-        }
+        // Show modal immediately — no delay, no guard
+        setPendingZone(zoneId);
     };
 
     const handleExit = () => {
         setIsInside(false);
-        // Auto-dismiss modal if car leaves before user confirms
-        // Only dismiss if modal is still showing THIS zone (not if user already navigated)
-        setPendingZone(null);
+        // Do NOT clear pendingZone here — modal stays open so user can tap buttons
+        // ZoneConfirmModal's dismiss/confirm buttons handle closing
     };
 
     return (

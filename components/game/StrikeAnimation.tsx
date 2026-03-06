@@ -140,15 +140,6 @@ export function StrikeAnimation({ onDone }: StrikeAnimationProps) {
                     {/* E */}<span style={{ color: '#1a3a8a', textShadow: '0 0 40px rgba(26,58,138,0.8), 3px 3px 0 #000' }}>E</span>
                 </div>
 
-                {/* Exclamation + Pin emojis */}
-                <div style={{
-                    fontSize: 'clamp(1.5rem, 4vw, 3rem)',
-                    letterSpacing: '0.3em',
-                    animation: 'strikePinBounce 0.4s ease-in-out infinite alternate',
-                }}>
-                    🎳🎳🎳
-                </div>
-
                 {/* "ALL 10 DOWN!" */}
                 <div style={{
                     fontFamily: "'JetBrains Mono', monospace",

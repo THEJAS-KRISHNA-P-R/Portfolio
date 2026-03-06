@@ -17,7 +17,8 @@ import { GameClearBanner } from "@/components/game/GameClearBanner"
 import { CheatCodeManager } from "@/components/game/CheatCodeManager"
 import { GameNotifContainer } from "@/components/game/GameNotifications"
 import { MazeHUDOverlay } from "@/components/game/MazeHUDOverlay"
-import { FootballScoreOverlay } from "@/components/game/FootballScoreOverlay"
+// import { FootballScoreOverlay } from "@/components/game/FootballScoreOverlay"
+
 
 export default function Home() {
   const isGameMode = usePortfolioStore((s) => s.isGameMode);
@@ -68,7 +69,7 @@ export default function Home() {
           <MazeModeModal />
           <CheatCodeManager />
           <MazeHUDOverlay />
-          <FootballScoreOverlay />
+          {/* <FootballScoreOverlay /> */}
           <GameClearBanner />
           <TurboVignette />
           <ZoneConfirmModal />

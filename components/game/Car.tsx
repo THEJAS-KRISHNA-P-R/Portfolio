@@ -263,7 +263,7 @@ export function Car() {
             boostActive.current = true;
             boostTimer.current = BOOST_DURATION;
             // No longer resetting to 0 instantly! We'll drain it.
-            // if (!keys.shift && !_infiniteBoost) boostCharge.current = 0;
+            // if (!keys.boost && !_infiniteBoost) boostCharge.current = 0;
             driveTimeAccum.current = 0;
             setShowFlames(true);
         }
@@ -272,7 +272,7 @@ export function Car() {
             boostTimer.current = BOOST_DURATION; // keep resetting
         }
 
-        if (keys.shift && boostActive.current) {
+        if (keys.boost && boostActive.current) {
             boostCharge.current = Math.max(0, boostCharge.current - 25 * dt);
             if (boostCharge.current <= 0) {
                 boostActive.current = false;
@@ -280,7 +280,7 @@ export function Car() {
             }
         }
 
-        if (boostActive.current && !keys.shift) {
+        if (boostActive.current && !keys.boost) {
             // Drain charge during one-shot boost (so it's not "instant")
             if (!_infiniteBoost) {
                 boostCharge.current = Math.max(0, boostCharge.current - (100 / BOOST_DURATION) * dt);

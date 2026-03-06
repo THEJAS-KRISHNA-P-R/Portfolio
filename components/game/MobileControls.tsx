@@ -532,6 +532,7 @@ export function MobileControls() {
     try { return (localStorage.getItem('mobileControlScheme') as ControlScheme) ?? 'buttons' }
     catch { return 'buttons' }
   })
+  const pendingZone = usePortfolioStore(s => s.pendingZone)
 
   // Button active states (visual only)
   const [activeLeft, setActiveLeft] = useState(false)
@@ -621,10 +622,14 @@ export function MobileControls() {
 
       {/* ── Double-tap anywhere (below buttons) = turbo ─────────────────── */}
       <div
-        onPointerDown={handleDoubleTap}
+        onPointerDown={e => {
+          if (pendingZone) return  // modal is open — don't eat the tap
+          handleDoubleTap(e)
+        }}
         style={{
           position: 'fixed', inset: 0, zIndex: 238,
-          pointerEvents: 'auto',
+          // Disable when modal is open so modal buttons can be tapped
+          pointerEvents: pendingZone ? 'none' : 'auto',
           background: 'transparent',
           touchAction: 'none',
         }}

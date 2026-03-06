@@ -60,7 +60,7 @@ export function GoalPost() {
                 title: 'GOAL!',
                 value: `${scoreValue} pts`,
                 subtext: `Best: ${currentHigh} pts`,
-                duration: 2500,
+                duration: 500,
             });
             window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'football', isRecord: false, value: `${scoreValue} pts` } }));
         }

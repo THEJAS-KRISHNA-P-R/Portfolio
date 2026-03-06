@@ -1,12 +1,74 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { gameState } from "@/components/game/Car"
+
+function HighScoreBadge({ score }: { score: number }) {
+    const [visible, setVisible] = useState(false)
+    const [shouldRender, setShouldRender] = useState(false)
+    const [displayed, setDisplayed] = useState(score)
+    const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const unmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Show badge whenever score changes (new high score set) or on load
+    useEffect(() => {
+        if (score <= 0) return
+        setDisplayed(score)
+        setVisible(true)
+        setShouldRender(true)
+
+        // Auto-hide after 5 seconds
+        if (hideTimer.current) clearTimeout(hideTimer.current)
+        hideTimer.current = setTimeout(() => {
+            setVisible(false)
+            // Unmount after fade-out transition (0.4s)
+            if (unmountTimer.current) clearTimeout(unmountTimer.current)
+            unmountTimer.current = setTimeout(() => {
+                setShouldRender(false)
+            }, 500)
+        }, 5000)
+
+        return () => {
+            if (hideTimer.current) clearTimeout(hideTimer.current)
+            if (unmountTimer.current) clearTimeout(unmountTimer.current)
+        }
+    }, [score])
+
+    if (!shouldRender || displayed <= 0) return null
+
+    return (
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            background: 'rgba(4,14,9,0.85)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,210,0,0.3)',
+            borderRadius: '8px',
+            padding: '0.3rem 0.65rem',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 'clamp(0.48rem, 1.3vw, 0.56rem)',
+            color: 'rgba(255,210,0,0.85)',
+            letterSpacing: '0.1em',
+            width: 'fit-content',
+            // Fade out in last 0.4s of the 5s display window
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'translateY(0)' : 'translateY(-5px)',
+            transition: 'opacity 0.4s ease, transform 0.4s ease',
+            pointerEvents: 'none',
+        }}>
+            <span>🏆</span>
+            <span>BEST {displayed}</span>
+        </div>
+    )
+}
 
 export default function HUD() {
     const isGameMode = usePortfolioStore(s => s.isGameMode)
     const setIsGameMode = usePortfolioStore(s => s.setIsGameMode)
+    const footballHighScore = usePortfolioStore(s => s.footballHighScore)
     const [displaySpeed, setDisplaySpeed] = useState(0)
     const [displayTurbo, setDisplayTurbo] = useState(100)
     const [showControls, setShowControls] = useState(true)
@@ -85,7 +147,15 @@ export default function HUD() {
                 }
             `}</style>
             {/* ── TOP LEFT: Title ── */}
-            <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10 }}>
+            <div style={{
+                position: 'absolute',
+                top: '1rem',
+                left: '1rem',
+                zIndex: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.6rem'
+            }}>
                 <div className="hud-title-box" style={{
                     background: 'rgba(5,15,10,0.75)',
                     border: '1px solid rgba(0,230,118,0.15)',
@@ -100,6 +170,10 @@ export default function HUD() {
                     <p style={{ color: '#4a7a5a', fontSize: '11px', margin: '2px 0 0 0' }}>
                         Drive to zones to explore
                     </p>
+                </div>
+
+                <div style={{ paddingLeft: '0.2rem' }}>
+                    <HighScoreBadge score={footballHighScore} />
                 </div>
             </div>
 
