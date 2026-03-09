@@ -16,7 +16,6 @@ import { MazeModeModal } from "@/components/game/MazeModeModal"
 import { GameClearBanner } from "@/components/game/GameClearBanner"
 import { CheatCodeManager } from "@/components/game/CheatCodeManager"
 import { GameNotifContainer } from "@/components/game/GameNotifications"
-import { MazeHUDOverlay } from "@/components/game/MazeHUDOverlay"
 // import { FootballScoreOverlay } from "@/components/game/FootballScoreOverlay"
 
 
@@ -68,7 +67,6 @@ export default function Home() {
           <GameNotifContainer />
           <MazeModeModal />
           <CheatCodeManager />
-          <MazeHUDOverlay />
           {/* <FootballScoreOverlay /> */}
           <GameClearBanner />
           <TurboVignette />

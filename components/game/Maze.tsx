@@ -1,487 +1,344 @@
-"use client";
+"use client"
 
-import { useRef, useState, useEffect, useCallback, memo } from "react";
-import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Html } from "@react-three/drei";
-import { fireAchievement } from "./AchievementToast";
-import { usePortfolioStore } from "@/store/usePortfolioStore";
-import * as THREE from "three";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { RigidBody, CuboidCollider } from "@react-three/rapier"
+import { Instances, Instance } from "@react-three/drei"
+import * as THREE from "three"
+import { useQualityStore } from "@/store/useQualityStore"
+import { MazeMode } from "./MazeModeModal"
+import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { gameState } from "./Car"
 
-// ── Module-level constants ────────────────────────────────────────────────
-const MAZE_POS = new THREE.Vector3(-110, 0, 110);
-const MAZE_ROT = Math.PI * 0.75; // same as group rotation
-
-const C  = 4;    // cell size
-const T  = 0.4;  // half wall thickness
-const H  = 18;   // half maze size (9 cells × 2 = 18)
-const WH = 3.5;  // wall height
-const GAP = 5;   // entrance/exit opening width
-
-// Convert local spawn [0, 1.5, 24] to world space:
-const _localSpawn = new THREE.Vector3(0, 1.5, H + 6);
-const _euler = new THREE.Euler(0, MAZE_ROT, 0);
-export const MAZE_WORLD_SPAWN = _localSpawn.clone()
-    .applyEuler(_euler)
-    .add(MAZE_POS);
-
-// Car should face INTO maze = opposite of spawn direction = MAZE_ROT
-export const MAZE_WORLD_FACING = MAZE_ROT;
-// ─────────────────────────────────────────────────────────────────────────
-
-// ── Persistent high score ────────────────────────────────────────────────
-let globalBestTime = Infinity;
-let globalBestHits = Infinity;
-// ── Cheat: ghost mode — wall hits have no effect ────────────────────
-let _ghostMode = false;
-let _ghostTimer: ReturnType<typeof setTimeout> | null = null;
-// ─────────────────────────────────────────────────────────────────────────
-// WALL DEFINITIONS — relative to maze center
-// Each wall: [cx, cz, halfW, halfD] where W=X extent, D=Z extent
-// Traced from the image: entrance gap at south center, exit gap at north center
-// ─────────────────────────────────────────────────────────────────────────
-// Outer boundary — 4 sides with gaps
-// South wall: two halves with center gap (entrance ~4 units wide)
-// North wall: two halves with center gap (exit ~4 units wide)
-// Left/Right: full solid
-
-// OUTER WALLS
-const OUTER: [cx: number, cz: number, hw: number, hd: number][] = [
-  [-10.25,  H,   7.75, T],   // south LEFT
-  [ 10.25,  H,   7.75, T],   // south RIGHT
-  [-10.25, -H,   7.75, T],   // north LEFT  (exit)
-  [ 10.25, -H,   7.75, T],   // north RIGHT (exit)
-  [-H,      0,   T,    H ],  // west FULL
-  [ H,      0,   T,    H ],  // east FULL
+// ── Constants ─────────────────────────────────────────────────────────
+const MAZE_LAYOUT: number[][] = [
+    [1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1],
 ]
 
-// INNER WALLS — traced from a 9x9 grid
-const INNER: [number, number, number, number][] = [
-  // ── Row 2 horizontal walls ──────────────────────────────────────────
-  [-6,  10,  2, T],   // cols 1-2 blocked
-  [ 0,  10,  2, T],   // col 3-4
-  [ 6,  10,  2, T],   // col 5-6
+const MAZE_ROWS = 13
+const MAZE_COLS = 25
+const CELL_SIZE = 4
+const WALL_HEIGHT = 3.5
+const WALL_HALF_H = WALL_HEIGHT / 2
+const CELL_HALF = CELL_SIZE / 2
 
-  // ── Row 3 horizontal walls ──────────────────────────────────────────
-  [-2,   6,  2, T],   // one segment
-  [ 8,   6,  2, T],   // right side
+const MAZE_ORIGIN_X = -140
+const MAZE_ORIGIN_Z = 72
+const MAZE_CENTER_X = MAZE_ORIGIN_X + (MAZE_COLS * CELL_SIZE) / 2
+const MAZE_CENTER_Z = MAZE_ORIGIN_Z + (MAZE_ROWS * CELL_SIZE) / 2
 
-  // ── Row 4 horizontal walls (long wall divides top from bottom) ──────
-  [-10,  2,  2, T],
-  [-4,   2,  6, T],   // longer segment — 3 cells
-  [ 8,   2,  2, T],
+// Entry through gap in top wall (row 0 cols 1-2)
+const ENTRY_WORLD_X = MAZE_ORIGIN_X + 1.5 * CELL_SIZE
+const ENTRY_WORLD_Z = MAZE_ORIGIN_Z + 1.5 * CELL_SIZE
 
-  // ── Row 6 horizontal walls ──────────────────────────────────────────
-  [-4,  -6,  6, T],   // 3 cells center
-  [ 8,  -6,  2, T],
+// Exit through gap in bottom wall (row 12 cols 22-23)
+const EXIT_WORLD_X = MAZE_ORIGIN_X + 22.5 * CELL_SIZE
+const EXIT_WORLD_Z = MAZE_ORIGIN_Z + 12.5 * CELL_SIZE
 
-  // ── Row 8 horizontal walls ──────────────────────────────────────────
-  [-6,  -10, 2, T],
-  [ 0,  -10, 2, T],
-  [ 6,  -10, 2, T],
+// ── Wall builders ──────────────────────────────────────────────────────
 
-  // ── Vertical walls ───────────────────────────────────────────────────
-  [-12,  8, T,  2],   // left inner spine north
-  [-12, -2, T,  4],   // left inner spine south
-
-  [-4,  14, T,  2],   // Col 3 boundary short top
-  [-4,   0, T,  2],   // mid
-  [-4,  -8, T,  2],   // near bottom
-
-  [ 4,   8, T,  2],   // Center vertical
-  [ 4,  -4, T,  4],
-
-  [ 12,  4, T,  6],   // Col 7 boundary long mid
-
-  [ 8,  12, T,  2],   // Right inner
-  [ 8,  -4, T,  2],
-]
-
-const ALL_WALLS = [...OUTER, ...INNER];
-
-// ── Exit blocker: one-way wall at north exit ──────────────────────────────
-// Sensor that blocks the car from entering via exit (north gap).
-// If car approaches exit from OUTSIDE (z < -HALF-1), block it.
-// Implemented as a solid wall outside the north gap — only removable
-// by scripted exit detection, not needed: simply add a solid invisible
-// wall just north of exit that blocks entry from the north.
-// The south entrance has no such blocker (entry is free).
-
-// ─────────────────────────────────────────────────────────────────────────
-type MazeMode = "reset" | "counter" | null;
-
-export const Maze = memo(function Maze() {
-    const setTeleportTarget = usePortfolioStore(s => s.setTeleportTarget);
-
-    // Modal state
-    const [mode, setMode] = useState<MazeMode>(null);
-    const [modalShown, setModalShown] = useState(false);  // only show once per entry
-
-    // Game state
-    const [hitCount, setHitCount] = useState(0);
-    const [bestTime, setBestTime] = useState(globalBestTime);
-    const [bestHits, setBestHits] = useState(globalBestHits);
-    const [running, setRunning] = useState(false);
-
-    const startTime = useRef(0);
-    const hitCooldown = useRef(false);
-    const modeRef = useRef<MazeMode>(null);
-    const runningRef = useRef(false);
-
-    // Keep modeRef and runningRef in sync with state
-    useEffect(() => { modeRef.current = mode; }, [mode]);
-    useEffect(() => { runningRef.current = running; }, [running]);
-
-    // ── Spawn car at maze entrance ──────────────────────────────────────────
-    const respawnToStart = useCallback(() => {
-        // Fire a single event with BOTH position and rotation
-        window.dispatchEvent(new CustomEvent('car:teleport', {
-            detail: {
-                x: MAZE_WORLD_SPAWN.x,
-                y: MAZE_WORLD_SPAWN.y,
-                z: MAZE_WORLD_SPAWN.z,
-                rotationY: MAZE_WORLD_FACING,
+// VISUAL: one position per wall cell — no overlaps, no "+" artifacts
+function buildVisualCells(layout: number[][]): [number, number, number][] {
+    const out: [number, number, number][] = []
+    for (let row = 0; row < MAZE_ROWS; row++) {
+        for (let col = 0; col < MAZE_COLS; col++) {
+            if (layout[row][col] === 1) {
+                out.push([
+                    MAZE_ORIGIN_X + (col + 0.5) * CELL_SIZE,
+                    WALL_HALF_H,
+                    MAZE_ORIGIN_Z + (row + 0.5) * CELL_SIZE,
+                ])
             }
-        }));
-    }, []);
-
-    const [lastExitTime, setLastExitTime] = useState(0);
-
-    // ── Entry trigger (south sensor) — show modal ──────────────────────────
-    const handleTriggerEnter = (e: any) => {
-        const obj = e.other?.rigidBodyObject;
-        if (!obj?.userData?.isCar) return;
-        
-        // Prevent instant re-trigger after exit (5s grace period)
-        if (performance.now() - lastExitTime < 5000) return;
-
-        if (modalShown && mode !== null) return;
-        window.dispatchEvent(new CustomEvent('maze:show-modal'));
-        setModalShown(true);
-        // FREEZE CAR IMMEDIATELY
-        window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }));
-    };
-
-    const handleEnter = (e: any) => {
-        const obj = e.other?.rigidBodyObject;
-        if (!obj?.userData?.isCar) return;
-        if (mode === null) return;   // no mode selected yet — ignore
-        if (!running) {
-            startTime.current = performance.now();
-            setRunning(true);
-            setHitCount(0);
-            // Re-notify HUD (covers both first entry AND re-entry after reset)
-            window.dispatchEvent(new CustomEvent('maze:mode-active', { detail: { mode: modeRef.current } }));
         }
-    };
+    }
+    return out
+}
 
-    // ── Exit trigger (north sensor) ─────────────────────────────────────────
-    const handleExit = (e: any) => {
-        const obj = e.other?.rigidBodyObject;
-        if (!obj?.userData?.isCar) return;
-        if (!running || startTime.current === 0) return;
+// PHYSICS: horizontal run-length merged — fewer Rapier bodies
+function buildPhysicsSegs(layout: number[][]): {
+    pos: [number, number, number]
+    args: [number, number, number]
+}[] {
+    const out: { pos: [number, number, number]; args: [number, number, number] }[] = []
+    for (let row = 0; row < MAZE_ROWS; row++) {
+        let col = 0
+        while (col < MAZE_COLS) {
+            if (layout[row][col] === 1) {
+                let len = 0
+                while (col + len < MAZE_COLS && layout[row][col + len] === 1) len++
+                out.push({
+                    pos: [
+                        MAZE_ORIGIN_X + (col + len / 2) * CELL_SIZE,
+                        WALL_HALF_H,
+                        MAZE_ORIGIN_Z + (row + 0.5) * CELL_SIZE,
+                    ],
+                    args: [len * CELL_HALF, WALL_HALF_H, CELL_HALF],
+                })
+                col += len
+            } else { col++ }
+        }
+    }
+    return out
+}
 
-        const elapsed = (performance.now() - startTime.current) / 1000;
-        setRunning(false);
-        startTime.current = 0;
+// ── Component ──────────────────────────────────────────────────────────
+export const Maze = memo(function Maze() {
+    const [mazeActive, setMazeActive] = useState(false)
+    const [pendingModal, setPendingModal] = useState(false)
+    const modeRef = useRef<MazeMode>('explore')
+    const startTime = useRef(0)
+    const lastHitTime = useRef(0)
+    const hasMoved = useRef(false)
 
-        const isRecord = elapsed < globalBestTime;
-        if (isRecord) { globalBestTime = elapsed; setBestTime(elapsed); }
+    const incrementMazeHits = usePortfolioStore(s => s.incrementMazeHits)
+    const resetMazeHits = usePortfolioStore(s => s.resetMazeHits)
+    const currentHits = usePortfolioStore(s => s.mazeHits)
 
-        fireAchievement({
-            type: 'maze',
-            title: isRecord ? '★ MAZE RECORD' : 'MAZE CLEAR',
-            value: `${elapsed.toFixed(2)}s`,
-            subtext: isRecord ? 'New best time!' : `Best: ${globalBestTime.toFixed(2)}s`,
-            color: '#00bfff',
-            isRecord,
-            duration: 4500,
-        });
+    const visualCells = useMemo(() => buildVisualCells(MAZE_LAYOUT), [])
+    const physicsSegs = useMemo(() => buildPhysicsSegs(MAZE_LAYOUT), [])
 
-        window.dispatchEvent(new CustomEvent('maze:cleared'));
-        window.dispatchEvent(new CustomEvent('maze:exited'));  // clears HUD mode overlay
-        window.dispatchEvent(new CustomEvent('game:clear', { detail: { game: 'maze', isRecord, value: `${elapsed.toFixed(2)}s` } }));
+    // ── Collision: handle consequences based on mode ──────────────────
+    const handleCollision = useCallback(() => {
+        if (!mazeActive) return
 
-        // Reset so car can re-enter for a fresh run
-        setMode(null);
-        modeRef.current = null;
-        setModalShown(false);
-    };
+        const now = performance.now()
+        // Debounce: Ignore hits within 1 second of the last one to prevent jitter counting
+        if (now - lastHitTime.current < 1000) return
+        lastHitTime.current = now
 
-    // ── Wall collision ───────────────────────────────────────────────────────
-    const handleWallHit = (e: any) => {
-        const obj = e.other?.rigidBodyObject;
-        if (!obj?.userData?.isCar) return;
-        if (!modeRef.current) return;
-        if (!runningRef.current) return; // not in an active run
-        if (_ghostMode) return;          // cheat: ghost mode active
-        if (hitCooldown.current) return;
-
-        hitCooldown.current = true;
-        setTimeout(() => { hitCooldown.current = false; }, 800);
-
-        if (modeRef.current === 'reset') {
-            setRunning(false);
-            startTime.current = 0;
-            setHitCount(0);
-            setModalShown(false);
-            respawnToStart();
-            window.dispatchEvent(new CustomEvent('maze:reset'));
-            fireAchievement({ 
-                type: 'maze', 
-                title: 'WALL HIT', 
-                value: 'RESET', 
-                subtext: 'Return to entrance', 
-                color: '#ff2200', 
-                duration: 2000 
-            });
-        } else {
-            // Counter mode
-            setHitCount(c => {
-                const next = c + 1;
-                if (next < globalBestHits) {
-                    globalBestHits = next;
-                    setBestHits(next);
+        if (modeRef.current === 'hits') {
+            incrementMazeHits()
+        } else if (modeRef.current === 'hard') {
+            // HARD MODE: Reset everything on one hit
+            startTime.current = 0 // Wait for movement again
+            hasMoved.current = false
+            window.dispatchEvent(new CustomEvent('car:teleport', {
+                detail: {
+                    position: { x: ENTRY_WORLD_X, y: 0.5, z: ENTRY_WORLD_Z },
+                    rotation: { x: 0, y: 1, z: 0, w: 0 },
                 }
-                window.dispatchEvent(new CustomEvent('maze:wall-hit', { detail: { count: next } }));
-                fireAchievement({ type: 'maze', title: 'WALL HIT', value: `${next}×`, subtext: 'Keep going!', color: '#ff9944', duration: 1800 });
-                return next;
-            });
+            }))
+            // Reset HUD state manually for hard reset
+            window.dispatchEvent(new CustomEvent('maze:hit-reset'))
         }
-    };
+    }, [mazeActive, incrementMazeHits])
 
+    // ── Approach: show mode select modal ──────────────────────────────
+    const handleApproach = useCallback(() => {
+        if (mazeActive || pendingModal) return
+        setPendingModal(true)
+        window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }))
+        window.dispatchEvent(new CustomEvent('maze:approach'))
+    }, [mazeActive, pendingModal])
+
+    // ── Exit: stop timer, fire completion ─────────────────────────────
+    const handleExit = useCallback(() => {
+        if (!mazeActive) return
+        const elapsed = (performance.now() - startTime.current) / 1000
+
+        // 1. Set inactive FIRST
+        setMazeActive(false)
+
+        // 2. Fire completion events
+        window.dispatchEvent(new CustomEvent('maze:complete', {
+            detail: {
+                time: modeRef.current === 'explore' ? undefined : (hasMoved.current ? elapsed : 0),
+                hits: modeRef.current === 'explore' ? undefined : currentHits,
+                mode: modeRef.current
+            }
+        }))
+        window.dispatchEvent(new CustomEvent('game:clear', {
+            detail: { game: 'maze', time: elapsed }
+        }))
+
+        // 3. Freeze controls
+        window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }))
+
+        // 4. Wait 3 seconds showing result, THEN teleport back to world 
+        // (Wait... actually the HUD overlay takes over pointer events, so car can stay there)
+        setTimeout(() => {
+            // We don't teleport back immediately here anymore, 
+            // let the user close the overlay first or wait.
+            // Actually, let's keep the auto-teleport as a "cleanup" after a longer delay 
+            // IF the user hasn't closed it.
+        }, 5000)
+
+    }, [mazeActive, currentHits])
+
+    // ── Event wiring ──────────────────────────────────────────────────
     useEffect(() => {
-        const onSelected = (e: Event) => {
-            const { mode: m } = (e as CustomEvent).detail as { mode: 'reset' | 'counter' };
-            setMode(m);
-            modeRef.current = m;
-            setHitCount(0);
-            startTime.current = 0;
-            setRunning(false);
-            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }));
-            // Timer starts on entry sensor — don't start it here
-            window.dispatchEvent(new CustomEvent('maze:mode-active', { detail: { mode: m } }));
-        };
-        const onDismissed = () => {
-            setModalShown(false);
-            setMode(null);
-            modeRef.current = null;
-            setLastExitTime(performance.now());
-        };
+        const onConfirm = (e: Event) => {
+            const mode = (e as CustomEvent).detail?.mode ?? 'explore'
+            modeRef.current = mode
+            setPendingModal(false)
+            setMazeActive(true)
+            startTime.current = 0
+            hasMoved.current = false
+            resetMazeHits()
+            lastHitTime.current = 0
+
+            // Teleport car to entry cell
+            window.dispatchEvent(new CustomEvent('car:teleport', {
+                detail: {
+                    position: { x: ENTRY_WORLD_X, y: 0.5, z: ENTRY_WORLD_Z },
+                    rotation: { x: 0, y: 1, z: 0, w: 0 },
+                }
+            }))
+
+            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }))
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
+            }, 800)
+
+            window.dispatchEvent(new CustomEvent('maze:start', {
+                detail: { mode }
+            }))
+        }
+
+        const onCancel = () => {
+            setPendingModal(false)
+            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
+        }
+
+        const onReset = () => {
+            setMazeActive(false)
+            setPendingModal(false)
+            startTime.current = 0
+            hasMoved.current = false
+        }
+
         const onForceExit = () => {
-            setRunning(false);
-            setMode(null);
-            modeRef.current = null;
-            setModalShown(false);
-            setHitCount(0);
-            startTime.current = 0;
-            setLastExitTime(performance.now());
-            window.dispatchEvent(new CustomEvent('maze:reset'));
-            window.dispatchEvent(new CustomEvent('maze:exited'));
-            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }));
-        };
-        window.addEventListener('maze:mode-selected', onSelected);
-        window.addEventListener('maze:dismissed', onDismissed);
-        window.addEventListener('maze:force-exit', onForceExit);
+            setMazeActive(false)
+            setPendingModal(false)
+            startTime.current = 0
+            hasMoved.current = false
+            window.dispatchEvent(new CustomEvent('maze:reset'))
+            window.dispatchEvent(new CustomEvent('car:teleport', {
+                detail: {
+                    position: { x: ENTRY_WORLD_X - 10, y: 0.5, z: MAZE_ORIGIN_Z - 12 },
+                    rotation: { x: 0, y: 0, z: 0, w: 1 },
+                }
+            }))
+            window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
+        }
+
+        window.addEventListener('maze:confirm', onConfirm)
+        window.addEventListener('maze:cancel', onCancel)
+        window.addEventListener('maze:reset', onReset)
+        window.addEventListener('maze:force-exit', onForceExit)
+
         return () => {
-            window.removeEventListener('maze:mode-selected', onSelected);
-            window.removeEventListener('maze:dismissed', onDismissed);
-            window.removeEventListener('maze:force-exit', onForceExit);
-        };
-    }, []);
+            window.removeEventListener('maze:confirm', onConfirm)
+            window.removeEventListener('maze:cancel', onCancel)
+            window.removeEventListener('maze:reset', onReset)
+            window.removeEventListener('maze:force-exit', onForceExit)
+        }
+    }, [resetMazeHits])
 
-    const wallColor = '#001a3a';
-    const wallEmissive = '#00bfff';
+    // ── Timer Start Check ──────────────────────────────────────────────
+    useEffect(() => {
+        if (!mazeActive) return
+        const id = setInterval(() => {
+            if (!hasMoved.current && gameState.speed > 0.1) {
+                hasMoved.current = true
+                startTime.current = performance.now()
+                window.dispatchEvent(new CustomEvent('maze:timer-start'))
+            }
+        }, 100)
+        return () => clearInterval(id)
+    }, [mazeActive])
 
+    // ── Render ────────────────────────────────────────────────────────
     return (
-        <group position={[-110, 0, 110]} rotation={[0, MAZE_ROT, 0]}>
+        <>
+            {/* ── Approach sensor — triggers modal ── */}
+            <RigidBody
+                type="fixed"
+                sensor
+                position={[ENTRY_WORLD_X, 0.05, MAZE_ORIGIN_Z - 6]}
+                onIntersectionEnter={handleApproach}
+            >
+                <CuboidCollider args={[2, 0.05, 2]} />
+            </RigidBody>
 
-            {/* ── Large ground square ────────────────────────────────────────── */}
-            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-                <planeGeometry args={[40, 40]} />
-                <meshStandardMaterial color="#000d1a" roughness={0.95} />
-            </mesh>
+            {/* EXIT SENSOR — only triggers handleExit if maze is active */}
+            <RigidBody
+                type="fixed"
+                sensor
+                position={[EXIT_WORLD_X, 0.05, EXIT_WORLD_Z + CELL_HALF]}
+                onIntersectionEnter={handleExit}
+            >
+                <CuboidCollider args={[2, 0.05, 2]} />
+            </RigidBody>
 
-            {/* Subtle grid on maze floor */}
-            <gridHelper
-                args={[36, 18, '#00bfff', '#001a3a']}
-                position={[0, 0.02, 0]}
-            />
+            {/* ENTRANCE BARRIER — ALWAYS blocks to prevent backtracking/unauthorized entry */}
+            <RigidBody type="fixed" position={[ENTRY_WORLD_X, WALL_HALF_H, MAZE_ORIGIN_Z + CELL_HALF]}>
+                <CuboidCollider args={[4, WALL_HALF_H, 0.2]} />
+            </RigidBody>
 
-            {/* ── All walls ──────────────────────────────────────────────────── */}
-            {ALL_WALLS.map(([cx, cz, hw, hd], i) => (
+            {/* EXIT BARRIER — ALWAYS blocks entry from outside. */}
+            <RigidBody type="fixed" position={[EXIT_WORLD_X, WALL_HALF_H, EXIT_WORLD_Z + CELL_HALF]}>
+                <CuboidCollider args={[CELL_SIZE / 2, WALL_HALF_H, 0.2]} sensor={mazeActive} />
+            </RigidBody>
+
+            {/* ── Visual walls — per-cell Instances ─ */}
+            <Instances limit={400}>
+                <boxGeometry args={[CELL_SIZE, WALL_HEIGHT, CELL_SIZE]} />
+                <meshStandardMaterial color="#0d2218" roughness={0.9} metalness={0.05} />
+                {visualCells.map((pos, i) => (
+                    <Instance key={i} position={pos} />
+                ))}
+            </Instances>
+
+            {/* ── Physics — merged horizontal segments ─────────────── */}
+            {physicsSegs.map((seg, i) => (
                 <RigidBody
-                    key={i}
+                    key={`mp-${i}`}
                     type="fixed"
-                    position={[cx, WH / 2, cz]}
-                    onCollisionEnter={handleWallHit}
-                    userData={{ isMazeWall: true }}
+                    position={seg.pos}
+                    onCollisionEnter={handleCollision}
                 >
-                    <CuboidCollider args={[hw, WH / 2, hd]} />
-                    {/* Main wall body */}
-                    <mesh castShadow receiveShadow>
-                        <boxGeometry args={[hw * 2, WH, hd * 2]} />
-                        <meshStandardMaterial
-                            color={wallColor}
-                            emissive={wallEmissive}
-                            emissiveIntensity={0.35}
-                            roughness={0.2}
-                            metalness={0.8}
-                        />
-                    </mesh>
-                    {/* Glowing top cap */}
-                    <mesh position={[0, WH / 2 + 0.06, 0]}>
-                        <boxGeometry args={[hw * 2, 0.1, hd * 2]} />
-                        <meshBasicMaterial color="#00bfff" transparent opacity={0.7} />
-                    </mesh>
+                    <CuboidCollider args={seg.args} />
                 </RigidBody>
             ))}
 
-            {/* ── Exit anti-entry sensor — detects car approaching exit from wrong side ─────────── */}
-            <RigidBody type="fixed" colliders={false} sensor
-                onIntersectionEnter={(e: any) => {
-                    const obj = e.other?.rigidBodyObject;
-                    if (!obj?.userData?.isCar) return;
-
-                    const pos = obj.translation();
-                    const carZ = (new THREE.Vector3(pos.x, pos.y, pos.z))
-                        .sub(new THREE.Vector3(-110, 0, 110))
-                        .applyEuler(new THREE.Euler(0, -MAZE_ROT, 0)).z;
-
-                    if (carZ < -18) {
-                        respawnToStart();
-                    }
-                }}
+            {/* ── Floor ─────────────────────────────────────────────── */}
+            <mesh
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[MAZE_CENTER_X, 0.01, MAZE_CENTER_Z]}
+                receiveShadow
             >
-                <CuboidCollider
-                    args={[GAP / 2, 2, 1.5]}
-                    position={[0, 2, -18 - 1.5]}
-                />
-            </RigidBody>
+                <planeGeometry args={[MAZE_COLS * CELL_SIZE, MAZE_ROWS * CELL_SIZE]} />
+                <meshStandardMaterial color="#0a1a10" roughness={0.95} />
+            </mesh>
 
-            {/* ── TRIGGER SQUARE — in front of south entrance ──────────────── */}
-            <group position={[0, 0, 18 + 5]}>
+            {/* ── Entry/Exit Markers ────────────────────────────────── */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ENTRY_WORLD_X, 0.02, ENTRY_WORLD_Z]}>
+                <circleGeometry args={[1.4, 8]} />
+                <meshBasicMaterial color="#00ff88" transparent opacity={0.5} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[EXIT_WORLD_X, 0.02, EXIT_WORLD_Z]}>
+                <circleGeometry args={[1.4, 8]} />
+                <meshBasicMaterial color="#ff4444" transparent opacity={0.5} depthWrite={false} />
+            </mesh>
 
-                {/* Glowing floor square — bigger than car (~8×8 units) */}
-                <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[8, 8]} />
-                    <meshBasicMaterial color="#00bfff" transparent opacity={0.18} />
+            {!mazeActive && (
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ENTRY_WORLD_X, 0.02, MAZE_ORIGIN_Z - 6]}>
+                    <planeGeometry args={[4, 4]} />
+                    <meshBasicMaterial color="#00bfff" transparent opacity={0.12} depthWrite={false} />
                 </mesh>
-
-                {/* Animated pulsing border ring */}
-                <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <ringGeometry args={[3.8, 4.2, 4]} />  {/* square-ish ring: 4 segments */}
-                    <meshBasicMaterial color="#00bfff" transparent opacity={0.5} side={2} />
-                </mesh>
-
-                {/* Corner markers */}
-                {[[-3.5, -3.5], [3.5, -3.5], [-3.5, 3.5], [3.5, 3.5]].map(([x, z], i) => (
-                    <mesh key={i} position={[x, 0.1, z]}>
-                        <boxGeometry args={[0.3, 0.2, 0.3]} />
-                        <meshBasicMaterial color="#00bfff" />
-                    </mesh>
-                ))}
-
-                {/* "MAZE" label above the square */}
-                <Html position={[0, 3, 0]} center distanceFactor={12}>
-                    <div style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: '#00bfff',
-                        letterSpacing: '0.2em',
-                        textTransform: 'uppercase',
-                        textShadow: '0 0 12px rgba(0,191,255,0.7)',
-                        pointerEvents: 'none',
-                        whiteSpace: 'nowrap',
-                    }}>
-                        MAZE ▶
-                    </div>
-                </Html>
-
-                {/* Physics sensor — triggers modal */}
-                <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={handleTriggerEnter}>
-                    <CuboidCollider args={[4, 2, 4]} position={[0, 2, 0]} />
-                </RigidBody>
-            </group>
-
-            {/* ── South entry sensor (timer start) ──────────── */}
-            <group position={[0, 0, 18]}>
-                {/* Green glow strip on ground */}
-                <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[GAP, 1.5]} />
-                    <meshBasicMaterial color="#00ff88" transparent opacity={0.35} />
-                </mesh>
-                <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={handleEnter}>
-                    <CuboidCollider args={[GAP / 2, 2, 0.5]} position={[0, 2, 0]} />
-                </RigidBody>
-                {/* Entry label */}
-                <Html position={[0, 4.5, 0]} center distanceFactor={12}>
-                    <div style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '10px',
-                        color: '#00ff88',
-                        letterSpacing: '0.12em',
-                        textShadow: '0 0 10px rgba(0,255,136,0.6)',
-                        pointerEvents: 'none',
-                    }}>
-                        ENTER
-                    </div>
-                </Html>
-            </group>
-
-            {/* ── North exit sensor ─────────────────────────────────────────── */}
-            <group position={[0, 0, -18]}>
-                {/* Purple glow strip on ground */}
-                <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[GAP, 1.5]} />
-                    <meshBasicMaterial color="#ff00ff" transparent opacity={0.35} />
-                </mesh>
-                <RigidBody type="fixed" colliders={false} sensor onIntersectionEnter={handleExit}>
-                    <CuboidCollider args={[GAP / 2, 2, 0.5]} position={[0, 2, 0]} />
-                </RigidBody>
-                <Html position={[0, 4.5, 0]} center distanceFactor={12}>
-                    <div style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '10px',
-                        color: '#ff00ff',
-                        letterSpacing: '0.12em',
-                        textShadow: '0 0 10px rgba(255,0,255,0.6)',
-                        pointerEvents: 'none',
-                    }}>
-                        EXIT
-                    </div>
-                </Html>
-            </group>
-
-            {/* ── 3D Scoreboard above south entrance ────────────────────────── */}
-            <Html position={[0, 7, 18 + 2]} center distanceFactor={14}>
-                <div style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    textAlign: 'center',
-                    background: 'rgba(0,10,26,0.88)',
-                    border: '1px solid rgba(0,191,255,0.3)',
-                    borderRadius: '10px',
-                    padding: '0.5rem 0.9rem',
-                    backdropFilter: 'blur(8px)',
-                    pointerEvents: 'none',
-                    minWidth: '110px',
-                }}>
-                    <div style={{ fontSize: '9px', color: 'rgba(0,191,255,0.6)', letterSpacing: '0.14em' }}>
-                        MAZE
-                    </div>
-                    <div style={{ fontSize: '18px', color: '#00bfff', fontWeight: 800, lineHeight: 1.2 }}>
-                        {bestTime === Infinity ? '--' : `${bestTime.toFixed(2)}s`}
-                    </div>
-                    <div style={{ fontSize: '7px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em' }}>
-                        BEST TIME
-                    </div>
-                </div>
-            </Html>
-
-            {/* ── Ambient lighting ─────────────────────────────────────────── */}
-            <pointLight position={[0, 6, 0]} color="#00bfff" intensity={2.5} distance={40} decay={2} />
-
-            {/* MazeModeModal is a DOM overlay — see components/game/MazeModeModal.tsx */}
-        </group>
-    );
+            )}
+        </>
+    )
 })

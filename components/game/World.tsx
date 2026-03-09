@@ -20,12 +20,23 @@ import { getGroundTexture } from "@/lib/groundTexture";
 
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
 const Maze = React.lazy(() => import("./Maze").then(mod => ({ default: mod.Maze })));
+import { getMatcap } from "@/lib/SharedMaterials";
 
 function FrameloopManager() {
     const { setFrameloop } = useThree()
     const isGameMode = usePortfolioStore(s => s.isGameMode)
+
     useEffect(() => {
+        const handleVisibility = () => {
+            if (document.hidden) {
+                setFrameloop('demand')
+            } else if (isGameMode) {
+                setFrameloop('always')
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibility)
         setFrameloop(isGameMode ? 'always' : 'demand')
+        return () => document.removeEventListener('visibilitychange', handleVisibility)
     }, [isGameMode, setFrameloop])
     return null
 }
@@ -61,23 +72,41 @@ function GroundMaterial() {
         return getGroundTexture()
     }, [])
 
+    if (profile.tier === 'low' && profile.isMobile) {
+        return <meshBasicMaterial map={groundTex ?? undefined} color="#888" />
+    }
+
     return (
         <meshStandardMaterial
             map={groundTex ?? undefined}
-            color="#888888"
+            color="#ffffff"
             roughness={0.95}
             metalness={0.0}
-            envMapIntensity={0.0}
+            envMapIntensity={0.4}
         />
     )
 }
 
 function LampPosts({ positions }: { positions: [number, number, number][] }) {
     const profile = useQualityStore(s => s.profile)!
+    const carPos = usePortfolioStore(s => s.carPos)
+
+    // Optimization: find the N nearest lamp posts to the car to avoid maxing out light budget
+    const activeIndices = useMemo(() => {
+        if (profile.maxLights <= 0) return []
+        const distances = positions.map((pos, i) => ({
+            i,
+            d: Math.sqrt((carPos.x - pos[0]) ** 2 + (carPos.z - pos[2]) ** 2)
+        }))
+        return distances
+            .sort((a, b) => a.d - b.d)
+            .slice(0, profile.maxLights)
+            .map(x => x.i)
+    }, [carPos.x, carPos.z, profile.maxLights, positions])
 
     return (
         <group>
-            <Instances castShadow limit={50}>
+            <Instances castShadow={profile.shadows} limit={50}>
                 <cylinderGeometry args={[0.05, 0.07, 3.5, 6]} />
                 <meshStandardMaterial color="#223322" roughness={0.8} metalness={0.4} />
                 {positions.map((pos, i) => <Instance key={`lamp1-${i}`} position={pos} />)}
@@ -115,8 +144,16 @@ function LampPosts({ positions }: { positions: [number, number, number][] }) {
                         </mesh>
                     )}
 
-                    {/* Point light */}
-                    <pointLight color="#aaffcc" intensity={profile.isMobile ? 1.5 : 2.5} distance={12} decay={2} castShadow={false} />
+                    {/* Point light — Capped by nearest N */}
+                    {activeIndices.includes(i) && (
+                        <pointLight
+                            color="#aaffcc"
+                            intensity={profile.isMobile ? 1.5 : 2.5}
+                            distance={12}
+                            decay={2}
+                            castShadow={false}
+                        />
+                    )}
                 </group>
             ))}
         </group>
@@ -124,6 +161,7 @@ function LampPosts({ positions }: { positions: [number, number, number][] }) {
 }
 
 function WorldEnvironment() {
+    const profile = useQualityStore(s => s.profile)!
     // Tree clusters — scattered naturally around edges
     const TREE_POSITIONS: [number, number, number][] = [
         [15, 0, 20], [18, 0, 22], [14, 0, 25],      // cluster near start
@@ -146,12 +184,21 @@ function WorldEnvironment() {
     ]
 
     function SolidRock({ position, scale = 1 }: { position: [number, number, number], scale?: number }) {
+        const profile = useQualityStore(s => s.profile)!
+        const matcap = useMemo(() => getMatcap(), [])
+
         return (
             <RigidBody type="fixed" colliders={false} position={position}>
                 <CuboidCollider args={[0.55 * scale, 0.3 * scale, 0.5 * scale]} />
-                <mesh castShadow scale={scale}>
+                <mesh castShadow={profile.shadows} scale={scale}>
                     <dodecahedronGeometry args={[0.6, 0]} />
-                    <meshStandardMaterial color="#1a2a20" roughness={0.9} />
+                    {profile.isMobile ? (
+                        <meshLambertMaterial color="#888888" />
+                    ) : profile.useMatcaps ? (
+                        <meshMatcapMaterial matcap={matcap} color="#aaa" />
+                    ) : (
+                        <meshStandardMaterial color="#2a3a30" roughness={0.9} envMapIntensity={0} />
+                    )}
                 </mesh>
             </RigidBody>
         )
@@ -198,26 +245,44 @@ function WorldEnvironment() {
                 [-70, 0, 45], [20, 0, -80], [-50, 0, 70],
                 [90, 0, 10], [-20, 0, 90],
             ].map(([x, y, z], i) => (
-                <mesh key={i} rotation={[-Math.PI / 2, 0, Math.random()]} position={[x, 0.002, z]}>
+                <mesh key={i} rotation={[-Math.PI / 2, 0, Math.random()]} position={[x, 0.004, z]}>
                     <circleGeometry args={[4 + Math.random() * 5, 8]} />
-                    <meshStandardMaterial color="#071510" roughness={1} transparent opacity={0.6} />
+                    <meshStandardMaterial color="#071510" roughness={1} transparent opacity={0.6} depthWrite={false} />
                 </mesh>
             ))}
 
             {/* INSTANCED TREES */}
-            <Instances castShadow limit={50}>
+            <Instances castShadow={profile.shadows} limit={profile.tier === 'low' ? 30 : 50}>
                 <cylinderGeometry args={[0.12, 0.18, 1.2, 6]} />
-                <meshStandardMaterial color="#1a3d20" roughness={1} />
+                {profile.isMobile ? (
+                    <meshLambertMaterial color="#555555" />
+                ) : profile.useMatcaps ? (
+                    <meshMatcapMaterial matcap={getMatcap()} color="#999" />
+                ) : (
+                    <meshStandardMaterial color="#2a4d30" roughness={1} envMapIntensity={0} />
+                )}
                 {TREE_POSITIONS.map((pos, i) => <Instance key={`trunk-${i}`} position={[pos[0], pos[1] + 0.6, pos[2]]} />)}
             </Instances>
-            <Instances castShadow limit={50}>
+            <Instances castShadow={profile.shadows} limit={profile.tier === 'low' ? 30 : 50}>
                 <coneGeometry args={[0.9, 2.2, 6]} />
-                <meshStandardMaterial color="#0d4a1f" roughness={1} />
+                {profile.isMobile ? (
+                    <meshLambertMaterial color="#1a5d24" />
+                ) : profile.useMatcaps ? (
+                    <meshMatcapMaterial matcap={getMatcap()} color="#aaa" />
+                ) : (
+                    <meshStandardMaterial color="#1d5a2f" roughness={1} envMapIntensity={0} />
+                )}
                 {TREE_POSITIONS.map((pos, i) => <Instance key={`foliage1-${i}`} position={[pos[0], pos[1] + 2.0, pos[2]]} />)}
             </Instances>
-            <Instances castShadow limit={50}>
+            <Instances castShadow={profile.shadows} limit={profile.tier === 'low' ? 30 : 50}>
                 <coneGeometry args={[0.6, 1.6, 6]} />
-                <meshStandardMaterial color="#0f5a24" roughness={1} />
+                {profile.isMobile ? (
+                    <meshLambertMaterial color="#2a6d34" />
+                ) : profile.useMatcaps ? (
+                    <meshMatcapMaterial matcap={getMatcap()} color="#aaa" />
+                ) : (
+                    <meshStandardMaterial color="#1f6a34" roughness={1} envMapIntensity={0} />
+                )}
                 {TREE_POSITIONS.map((pos, i) => <Instance key={`foliage2-${i}`} position={[pos[0], pos[1] + 2.9, pos[2]]} />)}
             </Instances>
 
@@ -255,7 +320,13 @@ function WorldEnvironment() {
                     {/* Visible hedge row */}
                     <mesh>
                         <boxGeometry args={[300, 1.5, 0.8]} />
-                        <meshStandardMaterial color="#0a2a12" roughness={1} />
+                        {profile.isMobile ? (
+                            <meshLambertMaterial color="#0a2a12" />
+                        ) : profile.useMatcaps ? (
+                            <meshMatcapMaterial matcap={getMatcap()} color="#051508" />
+                        ) : (
+                            <meshStandardMaterial color="#0a2a12" roughness={1} envMapIntensity={0} />
+                        )}
                     </mesh>
                 </group>
             ))}
@@ -293,76 +364,82 @@ function GameCanvas({ children }: { children: React.ReactNode }) {
     const profile = useQualityStore(s => s.profile)!
     const [dpr, setDpr] = useState(profile.dpr)
 
-    // ── MOBILE: exactly as it was before ──────────────────────────────────
+    // ── MOBILE: exactly as it was before, with touchAction fix ─────────────
     if (profile.isMobile) {
         return (
-            <div style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
-                <Canvas
-                    dpr={dpr}
-                    shadows={profile.shadows}
-                    gl={{
-                        antialias: false,
-                        powerPreference: 'high-performance',
-                        stencil: false,
-                        alpha: false,
-                    }}
-                    onCreated={({ gl }) => {
-                        gl.shadowMap.enabled = profile.shadows
-                        gl.shadowMap.type = THREE.PCFSoftShadowMap
-                    }}
-                    camera={{ fov: 58, near: 0.3, far: 200 }}
-                    performance={{ min: 0.4 }}
-                >
-                    <AdaptiveEvents />
-                    <PerformanceMonitor
-                        bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
-                        onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
-                        onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
-                        onFallback={() => setDpr(0.5)}
-                    />
-                    <FrameloopManager />
-                    {children}
-                </Canvas>
+            <div style={{ position: 'absolute', inset: 0 }}>
+                <div style={{ width: '100%', height: '100%' }}>
+                    <Canvas
+                        style={{ touchAction: 'none' }}   // Moved from div to Canvas
+                        dpr={dpr}
+                        shadows={profile.shadows}
+                        gl={{
+                            antialias: false,
+                            powerPreference: 'high-performance',
+                            stencil: false,
+                            alpha: false,
+                        }}
+                        onCreated={({ gl }) => {
+                            gl.shadowMap.enabled = profile.shadows
+                            gl.shadowMap.type = THREE.PCFSoftShadowMap
+                        }}
+                        camera={{ fov: 58, near: 0.3, far: 200 }}
+                        performance={{ min: 0.4 }}
+                    >
+                        <AdaptiveEvents />
+                        <PerformanceMonitor
+                            bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
+                            onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
+                            onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
+                            onFallback={() => setDpr(0.5)}
+                        />
+                        <FrameloopManager />
+                        {children}
+                    </Canvas>
+                </div>
             </div>
         )
     }
 
     // ── DESKTOP: upgraded renderer ────────────────────────────────────────
     return (
-        <div style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
-            <Canvas
-                dpr={dpr}
-                shadows="soft"
-                gl={{
-                    antialias: false,
-                    powerPreference: 'high-performance',
-                    stencil: false,
-                    alpha: false,
-                    toneMapping: THREE.ACESFilmicToneMapping,
-                    toneMappingExposure: 1.15,
-                    outputColorSpace: THREE.SRGBColorSpace,
-                    logarithmicDepthBuffer: false,
-                }}
-                onCreated={({ gl }) => {
-                    gl.shadowMap.enabled = true
-                    gl.shadowMap.type = THREE.PCFSoftShadowMap
-                    gl.shadowMap.autoUpdate = true
-                    gl.capabilities.getMaxAnisotropy()
-                }}
-                camera={{ fov: 55, near: 0.3, far: 400 }}
-                performance={{ min: 0.5 }}
-            >
-                <AdaptiveEvents />
-                <PerformanceMonitor
-                    bounds={() => [48, 62]}
-                    onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
-                    onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
-                    onFallback={() => setDpr(1.0)}
-                    flipflops={4}
-                />
-                <FrameloopManager />
-                {children}
-            </Canvas>
+        <div style={{ position: 'absolute', inset: 0 }}>
+            <div style={{ width: '100%', height: '100%' }}>
+                <Canvas
+                    style={{ touchAction: 'none' }}       // Moved from div to Canvas
+                    dpr={dpr}
+                    shadows="soft"
+                    gl={{
+                        antialias: false,
+                        powerPreference: 'high-performance',
+                        stencil: false,
+                        alpha: false,
+                        toneMapping: THREE.ACESFilmicToneMapping,
+                        toneMappingExposure: 1.15,
+                        outputColorSpace: THREE.SRGBColorSpace,
+                        logarithmicDepthBuffer: false,
+                    }}
+                    onCreated={({ gl }) => {
+                        gl.shadowMap.enabled = true
+                        gl.shadowMap.type = THREE.PCFSoftShadowMap
+                        gl.shadowMap.autoUpdate = true
+                        gl.capabilities.getMaxAnisotropy()
+                    }}
+                    camera={{ fov: 55, near: 0.3, far: 400 }}
+                    performance={{ min: 0.5 }}
+                >
+                    <AdaptiveEvents />
+                    <PerformanceMonitor
+                        bounds={() => [48, 62]}
+                        onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
+                        onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
+                        onFallback={() => setDpr(1.0)}
+                        flipflops={4}
+                    />
+                    <FrameloopManager />
+                    {children}
+                </Canvas>
+            </div>
         </div>
     )
 }
@@ -478,6 +555,7 @@ function AdaptivePhysics({ children }: { children: React.ReactNode }) {
         <Physics
             gravity={[0, -9.81, 0]}
             timeStep={profile.isMobile ? (1 / profile.physicsHz) : (1 / 120)}
+            numSolverIterations={profile.physicsIter}
             interpolate
             colliders={false}
         >
@@ -600,7 +678,7 @@ const MazeZone = () => {
         return dist(wx, wz) < 160
     }
 
-    return shouldRender(-110, 110) ? (
+    return shouldRender(-90, 98) ? (
         <Suspense fallback={null}>
             <Maze />
         </Suspense>

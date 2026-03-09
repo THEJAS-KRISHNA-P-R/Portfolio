@@ -7,25 +7,36 @@ import { RigidBody, CuboidCollider, type RapierRigidBody, useRapier } from '@rea
 import * as THREE from 'three'
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { mobileInput } from "@/components/game/MobileControls";
-import { getProfileSync } from "@/lib/deviceTier";
 import { getCarBodyMaterial } from "@/lib/materials";
 import { DriftSmoke } from "./DriftSmoke";
+import { useQualityStore } from "@/store/useQualityStore";
+
+function BlobShadow({ visible }: { visible: boolean }) {
+    if (!visible) return null;
+    return (
+        <mesh position={[0, -0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[1.4, 8]} />
+            <meshBasicMaterial color="black" transparent opacity={0.3} depthWrite={false} />
+        </mesh>
+    );
+}
 
 // ── Rocket League Tuning ─────────────────────────────────────────────────────
 const TOP_SPEED = 18
-const ACCEL = 0.10     // was 0.15 — heavier feel
-const BRAKE = 0.15     // was 0.12
-const COAST_DECEL = 0.025    // was 0.04 — longer momentum
-const REVERSE_SPEED = 8
+const ACCEL = 0.055
+const BOOST_ACCEL = 0.15
+const BRAKE = 0.045
+const COAST_DECEL = 0.012
+const REVERSE_SPEED = 10
+const BOOST_SPEED = 35
+const BOOST_DURATION = 3.3
+const BOOST_COOLDOWN = 2.0 // seconds between boost charges
+const BOOST_DRIVE_TO_RECHARGE = 12.0 // drive time for full refill if we don't use cooldown logic
+
 const WHEELBASE = 3.2    // virtual wheelbase length — controls turn radius feel
 const MAX_STEER_ANGLE = 0.52   // was 0.55
 const STEER_SPEED = 9.0    // was 6.0
 const STEER_RETURN = 12.0
-const BOOST_SPEED = 32
-const BOOST_ACCEL = 0.2
-const BOOST_DURATION = 2.5
-const BOOST_RECHARGE_DIST = 50
-const BOOST_DRIVE_TO_RECHARGE = 4.0
 
 const ACCEL_RAMP_UP_TIME = 1.5 // Time to reach full acceleration
 
@@ -35,13 +46,26 @@ const NORMAL_LATERAL_KEEP = 0.04   // grip — 96% of lateral killed per frame
 const DRIFT_COUNTER_TORQUE = 160;  // magnitude for yaw scaling
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Maze mode flag: disables R-key reset while inside maze ─────────────────
-let _inMaze = false
+// ── Maze mode constants ──────────────────────────────────────────────────
+const MAZE_X_MIN = -140
+const MAZE_X_MAX = -40
+const MAZE_Z_MIN = 72
+const MAZE_Z_MAX = 124
 
-// ── Cheat flags (module-level so useFrame reads them without closure stale issues) ──
-let _infiniteBoost = false
-let _maxSpeedActive = false
-let _maxSpeedTimer = 0
+function isInsideMaze(x: number, z: number): boolean {
+    return x > MAZE_X_MIN && x < MAZE_X_MAX && z > MAZE_Z_MIN && z < MAZE_Z_MAX
+}
+
+// ── Shared game state — plain object, never in Zustand ─────────────────────
+// Write here in useFrame (60fps), read by HUD/TurboVignette at 10-20fps poll.
+export const gameState = {
+    speed: 0,
+    turboCharge: 1, // 0-1
+    turboCooldown: 0, // 0-1 (1 means fully cooling down, 0 means ready)
+    drifting: false,
+    controlsFrozen: false,
+    position: { x: 0, y: 0, z: 0 },
+}
 
 // ── Scratch Objects for zero-allocation performance ────────────────────────
 const _carQuat = new THREE.Quaternion()
@@ -53,23 +77,23 @@ const _camOffset = new THREE.Vector3()
 const _carPos = new THREE.Vector3()
 const _vec3 = new THREE.Vector3()
 
-// ── Shared game state — plain object, never in Zustand ─────────────────────
-// Write here in useFrame (60fps), read by HUD/TurboVignette at 10-20fps poll.
-
-
-export const gameState = {
-    speed: 0,        // raw m/s (unsigned)
-    turboCharge: 0,  // 0..1
-    drifting: false, // true when drift key is held and car is moving
-}
+// ── Module-level flags ──────────────────────────────────────────────────
+let _inMaze = false
+let _infiniteBoost = false
+let _maxSpeedActive = false
+let _maxSpeedTimer = 0
 
 export function Car() {
     const carRef = useRef<RapierRigidBody>(null);
+    const profile = useQualityStore(s => s.profile)!;
     const { world } = useRapier();
     const [, getKeys] = useKeyboardControls();
     const [ready, setReady] = useState(false);
     const [showFlames, setShowFlames] = useState(false);
     const cameraTarget = useRef(new THREE.Vector3());
+    const _camTarget = useMemo(() => new THREE.Vector3(), [])
+
+    // ... (rest of the component state)
 
     // State
     const currentSpeed = useRef(0);
@@ -78,8 +102,6 @@ export function Car() {
     const isAccelerating = useRef(false);
     const steerInput = useRef(0);
     const smoothedSteerInput = useRef(0);
-    const boostActive = useRef(false);
-    const boostCharge = useRef(100);
     const trailPositions = useRef<THREE.Vector3[]>([]);
     const forwardDriveTime = useRef(0);
 
@@ -94,8 +116,11 @@ export function Car() {
     const spawnTimer = useRef(0);
     const SPAWN_DURATION = 1.5;
 
-    const boostTimer = useRef(0);
-    const driveTimeAccum = useRef(0);
+    const boostCharge = useRef(100)
+    const boostActive = useRef(false)
+    const boostTimer = useRef(0)
+    const boostCooldownTimer = useRef(0)
+    const driveTimeAccum = useRef(0)
 
     const mobileTurbo = usePortfolioStore(s => s.mobileTurbo);
     const teleportTarget = usePortfolioStore(s => s.teleportTarget);
@@ -111,9 +136,12 @@ export function Car() {
 
     useEffect(() => {
         const handler = (e: Event) => {
-            const { x, y, z, rotationY } = (e as CustomEvent<{
-                x: number; y: number; z: number; rotationY: number
-            }>).detail;
+            const detail = (e as CustomEvent).detail;
+
+            // Support both old flat structure and new nested { position, rotation } structure
+            const x = detail.position?.x ?? detail.x ?? 0;
+            const y = detail.position?.y ?? detail.y ?? 0.5;
+            const z = detail.position?.z ?? detail.z ?? 0;
 
             const body = carRef.current;
             if (!body) return;
@@ -125,20 +153,25 @@ export function Car() {
             // 2. Set position
             body.setTranslation({ x, y, z }, true);
 
-            // 3. Set rotation as quaternion
-            const halfAngle = rotationY / 2;
-            body.setRotation(
-                { x: 0, y: Math.sin(halfAngle), z: 0, w: Math.cos(halfAngle) },
-                true
-            );
+            // 3. Set rotation
+            if (detail.rotation) {
+                // Quaternion provided
+                body.setRotation(detail.rotation, true);
+                // Sync internal yaw state (approximate from quaternion y/w)
+                yaw.current = 2 * Math.atan2(detail.rotation.y, detail.rotation.w);
+            } else if (typeof detail.rotationY === 'number') {
+                const rotationY = detail.rotationY;
+                const halfAngle = rotationY / 2;
+                body.setRotation(
+                    { x: 0, y: Math.sin(halfAngle), z: 0, w: Math.cos(halfAngle) },
+                    true
+                );
+                yaw.current = rotationY;
+            }
 
-            // Sync internal yaw state
-            yaw.current = rotationY;
-
-            // 4. Reset internal speed states
+            // 4. Reset internal states
             currentSpeed.current = 0;
             forwardDriveTime.current = 0;
-
 
             // CONTROL DRIFT FIX: Clear all mobile input state on teleport/reset
             mobileInput.forward = false;
@@ -214,6 +247,13 @@ export function Car() {
             return;
         }
 
+        if (carRef.current) {
+            const p = carRef.current.translation()
+            gameState.position.x = p.x
+            gameState.position.y = p.y
+            gameState.position.z = p.z
+        }
+
         if (spawning.current) {
             spawnTimer.current += dt;
             const t = Math.min(spawnTimer.current / SPAWN_DURATION, 1);
@@ -259,7 +299,7 @@ export function Car() {
         const boostKeyEdge = shouldBoost && !prevBoostKey.current;
         prevBoostKey.current = shouldBoost;
 
-        if (boostKeyEdge && (boostCharge.current >= 10 || _infiniteBoost) && !boostActive.current && Math.abs(currentSpeed.current) > 0.5) {
+        if (boostKeyEdge && (boostCharge.current >= 10 || _infiniteBoost) && !boostActive.current && boostCooldownTimer.current <= 0 && Math.abs(currentSpeed.current) > 0.5) {
             boostActive.current = true;
             boostTimer.current = BOOST_DURATION;
             // No longer resetting to 0 instantly! We'll drain it.
@@ -289,7 +329,16 @@ export function Car() {
             if (boostTimer.current <= 0) {
                 boostActive.current = false;
                 setShowFlames(false);
+                // Trigger cooldown unless infinite boost is on
+                if (!_infiniteBoost) {
+                    boostCooldownTimer.current = BOOST_COOLDOWN;
+                }
             }
+        }
+
+        // Handle cooldown
+        if (boostCooldownTimer.current > 0) {
+            boostCooldownTimer.current = Math.max(0, boostCooldownTimer.current - dt);
         }
 
         if (_infiniteBoost) {
@@ -403,17 +452,14 @@ export function Car() {
         gameState.drifting = isDrifting;
         ; (window as any).__driftIntensity = di;
 
+        const pos = body.translation();
+        const inMaze = isInsideMaze(pos.x, pos.z);
+
         // --- LATERAL VELOCITY MATHS ---
         const rightVec = _rightDir.set(1, 0, 0).applyQuaternion(quatFromYaw);
         const currentVel = body.linvel();
         const velVec = _vel3.set(currentVel.x, 0, currentVel.z);
-        const lateralVel = rightVec.dot(velVec);   // how fast car slides sideways
-
-        // How much lateral velocity to KEEP:
-        // Normal grip:   keep 4% → tires cancel 96% sideways slip (sticky)
-        // Full drift:    keep 65% → rear floats, real slide feel
-        const lateralKeep = THREE.MathUtils.lerp(NORMAL_LATERAL_KEEP, DRIFT_LATERAL_KEEP, di);
-        const keptLateral = lateralVel * lateralKeep;
+        let lateralVel = rightVec.dot(velVec);   // how fast car slides sideways
 
         // YAW SPIN during drift:
         // Instead of torque (which gets zeroed), directly add to yaw.current.
@@ -423,6 +469,24 @@ export function Car() {
             const spinRate = (steerAngle.current / MAX_STEER_ANGLE) * di * 1.8 * (Math.abs(currentSpeed.current) / TOP_SPEED);
             yaw.current += spinRate * dt;
         }
+
+        // When inside maze, apply extra lateral damping to kill wall-bounce
+        if (inMaze) {
+            // Kill lateral velocity more aggressively in maze
+            lateralVel *= 0.85;
+            // Also cap max speed inside maze to prevent pinballing
+            const MAZE_MAX_SPEED = 10;
+            const speedSq = currentVel.x * currentVel.x + currentVel.z * currentVel.z;
+            if (speedSq > MAZE_MAX_SPEED * MAZE_MAX_SPEED) {
+                const currentSpeedVal = Math.sqrt(speedSq);
+                const scale = MAZE_MAX_SPEED / currentSpeedVal;
+                currentVel.x *= scale;
+                currentVel.z *= scale;
+            }
+        }
+
+        const lateralKeep = THREE.MathUtils.lerp(NORMAL_LATERAL_KEEP, DRIFT_LATERAL_KEEP, di);
+        const keptLateral = lateralVel * lateralKeep;
 
         const driveVel = forwardVec.multiplyScalar(currentSpeed.current);
 
@@ -442,12 +506,10 @@ export function Car() {
             if (trailPositions.current.length > 6) trailPositions.current.pop();
         }
 
-        // ── Camera (Rocket League chase cam) ─────────────────────────────
-        const pos = body.translation();
-
-
-
+        // ── Camera follow logic ────────────────────────────────────────────────
         const carPos = _carPos.set(pos.x, pos.y, pos.z);
+        _inMaze = isInsideMaze(carPos.x, carPos.z);
+
         const camOffset = _camOffset.set(0, 2.8, 5.5)
             .applyQuaternion(quatFromYaw)
             .add(carPos);
@@ -468,9 +530,10 @@ export function Car() {
 
         // ── gameState ──────────────────────────────────────────────────
         // Drive time & boost logic
-        gameState.speed = Math.abs(currentSpeed.current);
-        gameState.turboCharge = boostCharge.current;
-
+        gameState.speed = currentSpeed.current;
+        gameState.turboCharge = boostCharge.current / 100;
+        gameState.turboCooldown = boostCooldownTimer.current / BOOST_COOLDOWN;
+        gameState.controlsFrozen = controlsFrozen.current;
         usePortfolioStore.getState().setCarPos({ x: pos.x, y: pos.y, z: pos.z });
 
         // ── Fall recovery / Manual Reset ─────────────────────────────────
@@ -497,10 +560,11 @@ export function Car() {
                 colliders={false}
                 ccd={true}
                 mass={45}
-                linearDamping={0.3}
-                angularDamping={1.2}
+                linearDamping={0.5}
+                angularDamping={1.5}
                 enabledRotations={[false, true, false]}
-                friction={1.0}
+                friction={1.2}
+                restitution={0.1}
                 position={[0, 2, -5]}
             >
                 {/* Main body collider - raised slightly to clear ramp bottoms */}
@@ -509,7 +573,9 @@ export function Car() {
                 <CuboidCollider args={[0.58, 0.10, 1.17]} position={[0, -0.01, 0]} />
                 <TurboFlames visible={showFlames} />
                 <DriftSmoke />
-                <CarBody />
+                {/* Rule: blobShadow on -> real castShadow off */}
+                <CarBody castShadow={!profile.blobShadow} />
+                <BlobShadow visible={profile.blobShadow} />
             </RigidBody>
             {trailPositions.current.map((pos, i) => (
                 <mesh key={i} position={pos}>
@@ -587,17 +653,18 @@ function TurboFlames({ visible }: { visible: boolean }) {
     );
 }
 
-function CarBody() {
+function CarBody({ castShadow = true }: { castShadow?: boolean }) {
     const { scene } = useGLTF('/classic_muscle_car.glb');
+    const profile = useQualityStore(s => s.profile)!;
 
     const cloned = useMemo(() => {
-        // DESKTOP PERF FIX: pass isMobile so envMapIntensity is lower on mobile
-        const prof = getProfileSync();
-        const bodyMat = getCarBodyMaterial(prof.tier, prof.isMobile);
+        const bodyMat = getCarBodyMaterial(profile.tier, profile.isMobile);
 
         const c = scene.clone(true);
         c.traverse((child: any) => {
             if (!child.isMesh) return;
+            child.castShadow = castShadow;
+            child.receiveShadow = true;
             if (!child.material) return;
 
             const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -608,7 +675,7 @@ function CarBody() {
                 // ── PC MATERIAL UPGRADE ──────────────────────────────────────
                 // StandardMaterial doesn't support clearcoat/transmission
                 // Upgrade to PhysicalMaterial on desktop for premium look
-                if (!prof.isMobile && (m as any).isMeshStandardMaterial) {
+                if (!profile.isMobile && (m as any).isMeshStandardMaterial) {
                     const physMat = new THREE.MeshPhysicalMaterial();
                     // Manually transfer core properties to avoid .copy() crash on hidden props
                     physMat.color.copy(m.color);
@@ -623,7 +690,7 @@ function CarBody() {
                 if (m.name === 'Material' && m.color) {
                     // Main body
                     m.color.setStyle('#ff4000'); // Deeper orange-red
-                    if (prof.isMobile) {
+                    if (profile.isMobile) {
                         m.metalness = bodyMat.metalness;
                         m.roughness = bodyMat.roughness;
                         m.envMapIntensity = bodyMat.envMapIntensity;
@@ -638,7 +705,7 @@ function CarBody() {
                 if (m.name === 'Material.003') {
                     // Glass
                     m.transparent = true;
-                    if (prof.isMobile) {
+                    if (profile.isMobile) {
                         m.opacity = 0.42;
                         m.roughness = 0.0;
                         m.metalness = 0.1;
@@ -656,8 +723,8 @@ function CarBody() {
                 if (m.name === 'Material.001') {
                     // Chrome
                     m.metalness = 1.0;
-                    m.roughness = prof.isMobile ? 0.05 : 0.0;
-                    m.envMapIntensity = prof.isMobile ? 0.2 : 2.0;
+                    m.roughness = profile.isMobile ? 0.05 : 0.0;
+                    m.envMapIntensity = profile.isMobile ? 0.2 : 2.0;
                 }
 
                 if (Array.isArray(child.material)) {

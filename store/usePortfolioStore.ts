@@ -46,7 +46,23 @@ interface PortfolioStore {
     footballHighScore: number;
     setFootballScore: (n: number) => void;
 
-    // Maze state
+    // Maze modes & stats
+    mazeHits: number;
+    incrementMazeHits: () => void;
+    resetMazeHits: () => void;
+    mazeBestTime: number | null;
+    mazeBestHits: number | null;
+    setMazeRecord: (type: 'time' | 'hits', value: number) => boolean; // returns true if new record
+
+    // Unified Maze/Game State
+    gameState: {
+        status: 'idle' | 'playing' | 'completed';
+        startTime: number;
+        time: number;
+    };
+    setGameState: (state: Partial<PortfolioStore['gameState']>) => void;
+
+    // Maze state (legacy/compatibility)
     mazeRunning: boolean;
     setMazeRunning: (val: boolean) => void;
 
@@ -163,8 +179,37 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => ({
         footballHighScore: Math.max(n, s.footballHighScore),
     })),
 
+    mazeHits: 0,
+    incrementMazeHits: () => set((s) => ({ mazeHits: s.mazeHits + 1 })),
+    resetMazeHits: () => set({ mazeHits: 0 }),
+    mazeBestTime: null,
+    mazeBestHits: null,
+    setMazeRecord: (type, value) => {
+        const s = get();
+        if (type === 'time') {
+            const current = s.mazeBestTime;
+            const isNewBest = current === null || value < current;
+            if (isNewBest) set({ mazeBestTime: value });
+            return isNewBest;
+        } else {
+            const current = s.mazeBestHits;
+            const isNewBest = current === null || value < current;
+            if (isNewBest) set({ mazeBestHits: value });
+            return isNewBest;
+        }
+    },
+
     mazeRunning: false,
     setMazeRunning: (val) => set({ mazeRunning: val }),
+
+    gameState: {
+        status: 'idle',
+        startTime: 0,
+        time: 0,
+    },
+    setGameState: (updates) => set((s) => ({
+        gameState: { ...s.gameState, ...updates }
+    })),
 
     // Persisted initial state
     projects: initialProjects,

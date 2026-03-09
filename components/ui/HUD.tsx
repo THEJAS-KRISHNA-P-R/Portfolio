@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { gameState } from "@/components/game/Car"
+import { MazeMode } from "@/components/game/MazeModeModal"
 
 function HighScoreBadge({ score }: { score: number }) {
     const [visible, setVisible] = useState(false)
@@ -11,18 +12,15 @@ function HighScoreBadge({ score }: { score: number }) {
     const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const unmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    // Show badge whenever score changes (new high score set) or on load
     useEffect(() => {
         if (score <= 0) return
         setDisplayed(score)
         setVisible(true)
         setShouldRender(true)
 
-        // Auto-hide after 5 seconds
         if (hideTimer.current) clearTimeout(hideTimer.current)
         hideTimer.current = setTimeout(() => {
             setVisible(false)
-            // Unmount after fade-out transition (0.4s)
             if (unmountTimer.current) clearTimeout(unmountTimer.current)
             unmountTimer.current = setTimeout(() => {
                 setShouldRender(false)
@@ -53,7 +51,6 @@ function HighScoreBadge({ score }: { score: number }) {
             color: 'rgba(255,210,0,0.85)',
             letterSpacing: '0.1em',
             width: 'fit-content',
-            // Fade out in last 0.4s of the 5s display window
             opacity: visible ? 1 : 0,
             transform: visible ? 'translateY(0)' : 'translateY(-5px)',
             transition: 'opacity 0.4s ease, transform 0.4s ease',
@@ -71,296 +68,328 @@ export default function HUD() {
     const footballHighScore = usePortfolioStore(s => s.footballHighScore)
     const [displaySpeed, setDisplaySpeed] = useState(0)
     const [displayTurbo, setDisplayTurbo] = useState(100)
-    const [showControls, setShowControls] = useState(true)
-    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [displayCooldown, setDisplayCooldown] = useState(0)
     const [mazeRunning, setMazeRunning] = useState(false)
+    const [activeMode, setActiveMode] = useState<MazeMode>('explore')
+    const [mazeResult, setMazeResult] = useState<{ mode: MazeMode, time?: number, hits?: number, isNewBest?: boolean } | null>(null)
+    const [mazeTimer, setMazeTimer] = useState(0)
+    const [timerActive, setTimerActive] = useState(false)
+
+    const mazeHits = usePortfolioStore(s => s.mazeHits)
+    const mazeBestTime = usePortfolioStore(s => s.mazeBestTime)
+    const mazeBestHits = usePortfolioStore(s => s.mazeBestHits)
+    const setMazeRecord = usePortfolioStore(s => s.setMazeRecord)
 
     useEffect(() => {
-        const onActive = () => setMazeRunning(true)
-        const onDone = () => setMazeRunning(false)
-        window.addEventListener('maze:mode-active', onActive)
-        window.addEventListener('maze:cleared', onDone)
+        const onStart = (e: Event) => {
+            const mode = (e as CustomEvent).detail.mode
+            setActiveMode(mode)
+            setMazeRunning(true)
+            setMazeResult(null)
+            setMazeTimer(0)
+            setTimerActive(false)
+        }
+        const onTimerStart = () => setTimerActive(true)
+        const onDone = () => {
+            setMazeRunning(false)
+            setTimerActive(false)
+            setActiveMode('explore') // Reset to default
+        }
+        const onComplete = (e: Event) => {
+            const { mode, time, hits } = (e as CustomEvent).detail
+            setMazeRunning(false)
+            setTimerActive(false)
+
+            let isNewBest = false
+            if (mode === 'hard' && time !== undefined && time > 0) {
+                const recordExists = mazeBestTime !== null
+                const improved = setMazeRecord('time', time)
+                isNewBest = recordExists && improved
+            } else if (mode === 'hits' && hits !== undefined) {
+                const recordExists = mazeBestHits !== null
+                const improved = setMazeRecord('hits', hits)
+                isNewBest = recordExists && improved
+            }
+
+            setMazeResult({ mode, time, hits, isNewBest })
+        }
+        const onHitReset = () => {
+            setMazeTimer(0)
+            setTimerActive(false)
+            const label = document.querySelector('.hud-turbo-label') as HTMLElement
+            if (label) {
+                label.style.color = '#ff4444'
+                label.style.transition = 'none'
+                label.style.transform = 'scale(1.2)'
+                setTimeout(() => {
+                    label.style.transition = 'all 0.4s ease'
+                    label.style.color = ''
+                    label.style.transform = ''
+                }, 100)
+            }
+        }
+        window.addEventListener('maze:start', onStart)
+        window.addEventListener('maze:timer-start', onTimerStart)
+        window.addEventListener('maze:complete', onComplete)
+        window.addEventListener('maze:hit-reset', onHitReset)
         window.addEventListener('maze:reset', onDone)
         window.addEventListener('maze:exited', onDone)
         return () => {
-            window.removeEventListener('maze:mode-active', onActive)
-            window.removeEventListener('maze:cleared', onDone)
+            window.removeEventListener('maze:start', onStart)
+            window.removeEventListener('maze:timer-start', onTimerStart)
+            window.removeEventListener('maze:complete', onComplete)
+            window.removeEventListener('maze:hit-reset', onHitReset)
             window.removeEventListener('maze:reset', onDone)
             window.removeEventListener('maze:exited', onDone)
         }
-    }, [])
+    }, [mazeBestTime, mazeBestHits, setMazeRecord])
 
-    useEffect(() => {
-        const onChange = () => setIsFullscreen(!!document.fullscreenElement)
-        document.addEventListener('fullscreenchange', onChange)
-        return () => document.removeEventListener('fullscreenchange', onChange)
-    }, [])
-
-    // Poll gameState at 10fps — imperceptible lag, eliminates 60fps Zustand renders
     useEffect(() => {
         const id = setInterval(() => {
             setDisplaySpeed(Math.round(gameState.speed * 3.6))
             setDisplayTurbo(Math.round(gameState.turboCharge * 100))
+            setDisplayCooldown(gameState.turboCooldown)
+
+            if (timerActive) {
+                setMazeTimer(prev => prev + 0.1)
+            }
         }, 100)
         return () => clearInterval(id)
-    }, [])
-
-    const toggleFullscreen = async () => {
-        try {
-            if (!document.fullscreenElement) {
-                await document.documentElement.requestFullscreen()
-                setIsFullscreen(true)
-            } else {
-                await document.exitFullscreen()
-                setIsFullscreen(false)
-            }
-        } catch (_) { }
-    }
+    }, [timerActive])
 
     if (!isGameMode) return null
 
+    const closeOverlay = () => {
+        setMazeResult(null)
+        // Teleport car back to exit area in world
+        window.dispatchEvent(new CustomEvent('car:teleport', {
+            detail: {
+                position: { x: -35, y: 0.5, z: 130 },
+                rotation: { x: 0, y: 0, z: 0, w: 1 },
+            }
+        }))
+        window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: false } }))
+    }
+
     return (
-        <div
-            style={{
-                position: 'fixed',
-                inset: 0,
-                pointerEvents: 'none',
-                zIndex: 50,
-                fontFamily: "'JetBrains Mono', monospace",
-            }}
-        >
+        <div style={{
+            position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 500,
+            fontFamily: "'JetBrains Mono', monospace",
+        }}>
             <style>{`
                 @media (max-width: 600px) {
-                    .hud-title-box { padding: 0.4rem 0.8rem !important; }
-                    .hud-title-box h2 { font-size: 11px !important; }
-                    .hud-title-box p { font-size: 9px !important; }
                     .hud-turbo-bar { width: 80px !important; }
-                    .hud-controls-panel { display: none !important; }
                     .hud-speed-value { font-size: 1.1rem !important; }
-                    .hud-portfolio-btn { transform: scale(0.85); transform-origin: bottom right; }
                     .hud-turbo-label { font-size: 0.5rem !important; }
                 }
-                @media (max-height: 450px) and (orientation: landscape) {
-                    .hud-controls-panel { display: none !important; }
-                    .hud-title-box { padding: 0.3rem 0.6rem !important; }
-                    .hud-portfolio-btn { transform: scale(0.8); transform-origin: bottom right; }
-                }
             `}</style>
-            {/* ── TOP LEFT: Title ── */}
-            <div style={{
-                position: 'absolute',
-                top: '1rem',
-                left: '1rem',
-                zIndex: 10,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.6rem'
-            }}>
-                <div className="hud-title-box" style={{
-                    background: 'rgba(5,15,10,0.75)',
-                    border: '1px solid rgba(0,230,118,0.15)',
-                    borderRadius: '12px',
-                    padding: '0.6rem 1.2rem',
-                    backdropFilter: 'blur(8px)',
-                    textAlign: 'center',
-                }}>
-                    <h2 style={{ color: '#00e676', fontWeight: 700, fontSize: 'clamp(0.6rem, 1.8vw, 0.85rem)', margin: 0, letterSpacing: '0.08em' }}>
-                        PORTFOLIO WORLD
-                    </h2>
-                    <p style={{ color: '#4a7a5a', fontSize: '11px', margin: '2px 0 0 0' }}>
-                        Drive to zones to explore
-                    </p>
-                </div>
 
-                <div style={{ paddingLeft: '0.2rem' }}>
+            {/* ── TOP LEFT — Premium Portfolio Button ── */}
+            <div style={{
+                position: 'fixed', top: 'min(2rem, 4vh)', left: 'min(1rem, 4vw)',
+                zIndex: 300, pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '0.8rem',
+            }}>
+                <button
+                    className="hud-portfolio-btn"
+                    onClick={() => setIsGameMode(false)}
+                    style={{ transform: 'scale(1)', transformOrigin: 'left center' }}
+                >
+                    <div className="btn-outer">
+                        <div className="btn-inner">
+                            <span>Standard Portfolio</span>
+                        </div>
+                    </div>
+                </button>
+                <div style={{ pointerEvents: 'none' }}>
                     <HighScoreBadge score={footballHighScore} />
                 </div>
             </div>
 
-            {/* ── BOTTOM LEFT — Turbo only ── */}
+            {/* ── TOP RIGHT/CENTER — Mode Stats ── */}
+            {mazeRunning && (
+                <div style={{
+                    position: 'absolute',
+                    top: 'min(0.5rem, 2vh)',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.2rem',
+                    zIndex: 100,
+                    width: 'min(90vw, 400px)',
+                    pointerEvents: 'none'
+                }}>
+                    <div style={{ pointerEvents: 'auto' }}>
+                        <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('maze:force-exit'))}
+                            style={{
+                                background: 'rgba(255, 68, 68, 0.15)',
+                                backdropFilter: 'blur(8px)',
+                                border: '0.5px solid rgba(255, 68, 68, 0.4)',
+                                borderRadius: '12px',
+                                padding: '0.5rem 0.6rem',
+                                color: '#ff5555',
+                                fontSize: '0.65rem',
+                                fontWeight: 900,
+                                letterSpacing: '0.1em',
+                                cursor: 'pointer',
+                                textTransform: 'uppercase',
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 4px 15px rgba(255, 68, 68, 0.15)',
+                            }}
+                        >
+                            ✕ Exit Maze
+                        </button>
+                    </div>
+
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0rem',
+                        background: 'rgba(0,0,0,0.3)',
+                        padding: '0.1rem 0.6rem',
+                        borderRadius: '10px',
+                        backdropFilter: 'blur(2px)',
+                        border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <div style={{ fontSize: '0.4rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+                            {activeMode === 'explore' ? 'Exploration Protocol' : activeMode === 'hits' ? 'Hit Counter System' : 'Hard Mode Active'}
+                        </div>
+                        {activeMode === 'hits' && (
+                            <div style={{ fontSize: '0.6rem', color: '#ffcc00', fontWeight: 900 }}>
+                                <span style={{ fontSize: '.7rem', opacity: 0.5, marginRight: '0.1rem' }}>HITS:</span>
+                                {mazeHits}
+                            </div>
+                        )}
+                        {activeMode === 'hard' && (
+                            <div style={{ fontSize: '0.8rem', color: '#ff4444', fontWeight: 900 }}>
+                                {mazeTimer.toFixed(1)}s
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── BOTTOM LEFT — Turbo ── */}
             <div style={{
-                position: 'absolute',
-                bottom: '1.5rem',
-                left: '1rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.35rem',
-                pointerEvents: 'none',
-                zIndex: 10,
+                position: 'absolute', bottom: '1.5rem', left: '1rem',
+                display: 'flex', flexDirection: 'column', gap: '0.35rem', pointerEvents: 'none', zIndex: 10,
             }}>
                 <span className="hud-turbo-label" style={{
-                    fontSize: '0.58rem',
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    color: displayTurbo >= 100 ? '#00e676' : '#ff9940',
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.58rem', letterSpacing: '0.16em', textTransform: 'uppercase',
+                    color: displayCooldown > 0 ? '#ff5555' : (displayTurbo >= 100 ? '#00e676' : '#ff9940'),
                 }}>
-                    {displayTurbo >= 100 ? 'Turbo Ready' : `Charging ${Math.round(displayTurbo)}%`}
+                    {displayCooldown > 0 ? 'Cooling Down' : (displayTurbo >= 100 ? 'Turbo Ready' : `Charging ${Math.round(displayTurbo)}%`)}
                 </span>
                 <div className="hud-turbo-bar" style={{
-                    width: 'clamp(120px, 22vw, 220px)',
-                    height: '4px',
-                    background: 'rgba(255,255,255,0.08)',
-                    borderRadius: '2px',
-                    overflow: 'hidden',
+                    width: 'clamp(120px, 22vw, 220px)', height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden',
                 }}>
                     <div style={{
-                        height: '100%',
-                        width: `${Math.min(displayTurbo, 100)}%`,
-                        background: displayTurbo >= 100
-                            ? '#00e676'
-                            : gameState.speed > 0.1 && (displayTurbo > 0)
-                                ? '#ff6600'
-                                : 'rgba(0,230,118,0.5)',
-                        borderRadius: '2px',
-                        transition: 'width 0.1s linear',
+                        height: '100%', width: displayCooldown > 0 ? `${displayCooldown * 100}%` : `${Math.min(displayTurbo, 100)}%`,
+                        background: displayCooldown > 0 ? '#ff4444' : displayTurbo >= 100 ? '#00e676' : '#ff6600',
+                        transition: displayCooldown > 0 ? 'none' : 'width 0.1s linear',
                     }} />
                 </div>
             </div>
 
-            {/* ── Controls panel — sits above turbo bar, hidden during maze ── */}
-            <div className="hud-controls-panel" style={{
-                position: 'absolute',
-                bottom: '4.5rem',
-                left: '1rem',
-                pointerEvents: 'none',
-                opacity: (showControls && !mazeRunning) ? 1 : 0,
-                transition: 'opacity 1s ease',
-                zIndex: 10,
-            }}>
-                <div style={{
-                    background: 'rgba(5,15,10,0.7)',
-                    border: '1px solid rgba(0,230,118,0.1)',
-                    borderRadius: '10px',
-                    padding: '0.75rem 1rem',
-                    backdropFilter: 'blur(6px)',
-                }}>
-                    <p style={{ color: '#3d6b50', fontSize: '9px', letterSpacing: '0.2em', margin: '0 0 0.5rem 0', textTransform: 'uppercase' }}>
-                        Controls
-                    </p>
-                    {([
-                        ['W / ↑', 'Accelerate'],
-                        ['S / ↓', 'Brake'],
-                        ['A D', 'Steer'],
-                        ['Space', 'Drift'],
-                        ['T', 'Turbo'],
-                    ] as [string, string][]).map(([key, label]) => (
-                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                            <span style={{
-                                background: 'rgba(0,230,118,0.08)',
-                                border: '1px solid rgba(0,230,118,0.2)',
-                                borderRadius: '4px',
-                                padding: '1px 6px',
-                                fontSize: '10px',
-                                color: '#7aaa8a',
-                                minWidth: '36px',
-                                textAlign: 'center',
-                            }}>
-                                {key}
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#5a8a6a' }}>{label}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* ── BOTTOM RIGHT — Speed + Portfolio button ── */}
+            {/* ── BOTTOM RIGHT — Speed ── */}
             <div style={{
-                position: 'absolute',
-                bottom: '1.5rem',
-                right: '1rem',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                gap: '0.5rem',
-                zIndex: 10,
+                position: 'absolute', bottom: '1.5rem', right: '1rem',
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', zIndex: 10,
             }}>
-                {/* Speed */}
                 <div style={{ pointerEvents: 'none', textAlign: 'right' }}>
                     <div className="hud-speed-value" style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
-                        fontWeight: 700,
-                        color: '#00e676',
-                        lineHeight: 1,
-                        letterSpacing: '-0.02em',
-                    }}>
-                        {displaySpeed}
-                    </div>
-                    <div style={{
-                        fontSize: '0.5rem',
-                        letterSpacing: '0.12em',
-                        color: 'rgba(0,230,118,0.4)',
-                        textTransform: 'uppercase',
-                        fontFamily: "'JetBrains Mono', monospace",
-                    }}>
-                        km/h
-                    </div>
+                        fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)', fontWeight: 700, color: '#00e676', lineHeight: 1,
+                    }}>{displaySpeed}</div>
+                    <div style={{ fontSize: '0.5rem', color: 'rgba(0,230,118,0.4)', textTransform: 'uppercase' }}>km/h</div>
                 </div>
+            </div>
 
-                {/* Standard Portfolio button */}
-                <button
-                    onClick={() => setIsGameMode(false)}
-                    className="hud-portfolio-btn"
-                    style={{ pointerEvents: 'all' }}
-                >
-                    <div className="btn-outer">
-                        <div className="btn-inner">
-                            <span>Standard Portfolio →</span>
+            {/* ── Maze Completion Overlays ── */}
+            {mazeResult && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    pointerEvents: 'auto', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+                    padding: '2rem'
+                }}>
+                    <div style={{
+                        background: 'rgba(5, 15, 12, 0.98)', border: '2.5px solid',
+                        borderColor: mazeResult.isNewBest ? '#ffcc00' : '#00e676', borderRadius: '32px',
+                        padding: 'clamp(1rem, 3vw, 2rem)', textAlign: 'center', boxShadow: '0 0 120px rgba(0,0,0,1)',
+                        animation: 'maze-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        maxWidth: 'min(450px, 85vw)', position: 'relative'
+                    }}>
+                        <div style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', marginBottom: '0.4rem' }}>
+                            {mazeResult.isNewBest ? '👑' : (mazeResult.mode === 'explore' ? '🏁' : mazeResult.mode === 'hits' ? '🏆' : '🔥')}
                         </div>
+
+                        <h2 style={{
+                            fontSize: 'clamp(1rem, 3.5vw, 1.4rem)', color: mazeResult.isNewBest ? '#ffcc00' : '#fff',
+                            fontWeight: 900, margin: '0 0 0.4rem 0', textTransform: 'uppercase'
+                        }}>
+                            {mazeResult.isNewBest ? 'NEW WORLD RECORD!' : (
+                                mazeResult.mode === 'explore' ? 'Goal Reached!' :
+                                    mazeResult.mode === 'hits' ? 'Accuracy Master!' : 'Steel Nerves!'
+                            )}
+                        </h2>
+
+                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 'clamp(0.7rem, 2.2vw, 0.9rem)', lineHeight: 1.4, margin: '0 0 1rem 0' }}>
+                            {mazeResult.mode === 'explore' && "Journey complete."}
+                            {mazeResult.mode === 'hits' && `Accuracy: ${mazeResult.hits} hits.`}
+                            {mazeResult.mode === 'hard' && "Hard Protocol cleared."}
+                        </p>
+
+                        {(mazeResult.mode !== 'explore') && (
+                            <div style={{
+                                display: 'flex', gap: '0.8rem', justifyContent: 'center',
+                                background: 'rgba(255,255,255,0.05)', padding: 'clamp(0.6rem, 2vw, 1rem)', borderRadius: '20px',
+                                marginBottom: '1rem'
+                            }}>
+                                {mazeResult.time !== undefined && mazeResult.time > 0 && (
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Time</div>
+                                        <div style={{ fontSize: 'clamp(1.2rem, 4vw, 1.6rem)', color: '#fff', fontWeight: 800 }}>{mazeResult.time.toFixed(2)}s</div>
+                                    </div>
+                                )}
+                                {mazeResult.hits !== undefined && (
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Hits</div>
+                                        <div style={{ fontSize: 'clamp(1.2rem, 4vw, 1.6rem)', color: '#ffcc00', fontWeight: 800 }}>{mazeResult.hits}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                closeOverlay();
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            style={{
+                                background: mazeResult.isNewBest ? '#ffcc00' : '#00e676',
+                                color: '#000', border: 'none', borderRadius: '12px',
+                                padding: 'clamp(0.6rem, 2.5vw, 1rem) clamp(1.2rem, 5vw, 2.5rem)',
+                                fontWeight: 800, fontSize: 'clamp(0.75rem, 2.5vw, 0.9rem)',
+                                cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.1em',
+                                transition: 'all 0.2s ease', boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                                pointerEvents: 'auto'
+                            }}
+                        >
+                            Return to World
+                        </button>
                     </div>
-                </button>
-            </div>
 
-            {/* ── TOP RIGHT: Fullscreen Toggle ── */}
-            <div style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                zIndex: 20,
-                pointerEvents: 'all',
-            }}>
-                <button
-                    onClick={toggleFullscreen}
-                    title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                    style={{
-                        width: '34px',
-                        height: '34px',
-                        borderRadius: '8px',
-                        background: 'rgba(5,15,10,0.7)',
-                        border: '1px solid rgba(0,230,118,0.15)',
-                        color: 'rgba(0,230,118,0.6)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        backdropFilter: 'blur(4px)',
-                        transition: 'all 0.2s ease',
-                        padding: 0,
-                    }}
-                    onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = 'rgba(0,230,118,0.4)'
-                        e.currentTarget.style.color = '#00e676'
-                        e.currentTarget.style.background = 'rgba(5,15,10,0.9)'
-                    }}
-                    onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'rgba(0,230,118,0.15)'
-                        e.currentTarget.style.color = 'rgba(0,230,118,0.6)'
-                        e.currentTarget.style.background = 'rgba(5,15,10,0.7)'
-                    }}
-                >
-                    {isFullscreen ? (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M5.5 0v5.5H0v1h6.5V0h-1zm4 0v6.5H16v-1h-5.5V0h-1zM0 9.5v1h5.5V16h1V9.5H0zm9.5 5.5h1v-5.5H16v-1H9.5V15z" />
-                        </svg>
-                    ) : (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M1.5 1h4v-1h-5v5h1V1zm9-1v1h4v4h1V0h-5zm-10 14.5v-4h-1v5h5v-1h-4zm13.5.5h-4v1h5v-5h-1v4z" />
-                        </svg>
-                    )}
-                </button>
-            </div>
-
+                    <style>{`
+                        @keyframes maze-pop {
+                            from { opacity: 0; transform: scale(0.5) translateY(100px); }
+                            to { opacity: 1; transform: scale(1) translateY(0); }
+                        }
+                    `}</style>
+                </div>
+            )}
         </div>
     )
 }

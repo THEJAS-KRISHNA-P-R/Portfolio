@@ -49,7 +49,7 @@ const noise2D = createNoise2D();
 const FLAT_ZONES = [
     { x: 0, z: 0, radius: 14 },     // Center
     { x: -45, z: -45, radius: 15 }, // NW Corner: Bowling
-    { x: -110, z: 110, radius: 25 },// SW Corner: Maze
+    { x: -90, z: 98, radius: 35 }, // New Maze Footprint
     { x: 45, z: 45, radius: 16 },   // SE Corner: Football
     ...ZONES_ARRAY.map(z => ({ x: z.position[0], z: z.position[2], radius: 12 })),
 ];
