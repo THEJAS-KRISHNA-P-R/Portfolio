@@ -16,6 +16,7 @@ import { MazeModeModal } from "@/components/game/MazeModeModal"
 import { GameClearBanner } from "@/components/game/GameClearBanner"
 import { CheatCodeManager } from "@/components/game/CheatCodeManager"
 import { GameNotifContainer } from "@/components/game/GameNotifications"
+import LeaderboardNamePrompt from "@/components/ui/LeaderboardNamePrompt"
 // import { FootballScoreOverlay } from "@/components/game/FootballScoreOverlay"
 
 
@@ -71,6 +72,7 @@ export default function Home() {
           <GameClearBanner />
           <TurboVignette />
           <ZoneConfirmModal />
+          <LeaderboardNamePrompt />
           <SkipButton />
           <MobileControls />
         </div>

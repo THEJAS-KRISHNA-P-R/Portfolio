@@ -16,6 +16,7 @@ import { useQualityStore } from "@/store/useQualityStore";
 import { GameLoadingScreen } from "./GameLoadingScreen";
 import { Effects } from "./Effects";
 import { getGroundTexture } from "@/lib/groundTexture";
+import { LeaderboardBoard } from "./LeaderboardBoard";
 
 
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
@@ -624,6 +625,16 @@ function GameWorld() {
                                 <Suspense fallback={null}>
                                     <BowlingZones />
                                     <MazeZone />
+                                    <LeaderboardBoard
+                                        game="maze"
+                                        position={[-125, 1.6, 64]}
+                                        rotation={[0, Math.PI / 6 + Math.PI, 0]}
+                                    />
+                                    <LeaderboardBoard
+                                        game="football"
+                                        position={[36, 1.6, 45]}
+                                        rotation={[0, -Math.PI / 2, 0]}
+                                    />
                                 </Suspense>
 
                                 {/* Trigger Zones */}

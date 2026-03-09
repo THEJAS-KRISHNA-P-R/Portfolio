@@ -8,6 +8,7 @@ import { useQualityStore } from "@/store/useQualityStore"
 import { MazeMode } from "./MazeModeModal"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { gameState } from "./Car"
+import { handleGameComplete } from '@/lib/leaderboardService'
 
 // ── Constants ─────────────────────────────────────────────────────────
 const MAZE_LAYOUT: number[][] = [
@@ -161,6 +162,7 @@ export const Maze = memo(function Maze() {
         window.dispatchEvent(new CustomEvent('game:clear', {
             detail: { game: 'maze', time: elapsed }
         }))
+        handleGameComplete(0, elapsed, 'maze')
 
         // 3. Freeze controls
         window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }))

@@ -6,6 +6,7 @@ import { useKeyboardControls } from "@react-three/drei";
 import { RigidBody, RapierRigidBody, BallCollider } from "@react-three/rapier";
 import * as THREE from "three";
 import { fireAchievement } from "./AchievementToast";
+import { handleGameComplete } from '@/lib/leaderboardService';
 
 // Moved to SE corner
 const SPAWN: [number, number, number] = [45, 1, 35];
