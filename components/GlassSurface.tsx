@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useId } from "react"
+import React, { useId, useState, useEffect } from "react"
 import "./GlassSurface.css"
 
 interface GlassSurfaceProps {
@@ -43,6 +43,12 @@ export default function GlassSurface({
   const uid = useId().replace(/:/g, "")
   const filterId = `glass-filter-${uid}`
 
+  // Detect touch/mobile devices — skip expensive SVG+chromatic layers on mobile
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => {
+    setIsTouch(window.matchMedia("(pointer: coarse)").matches)
+  }, [])
+
   // Chromatic aberration — shift RGB channels slightly
   const rShift = redOffset * 0.5
   const gShift = greenOffset * 0.5
@@ -69,8 +75,8 @@ export default function GlassSurface({
       {/* SVG filter definitions */}
       <svg width="0" height="0" style={{ position: "absolute", pointerEvents: "none" }}>
         <defs>
+          {/* Original decoration filter */}
           <filter id={filterId} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
-            {/* Subtle turbulence for glass distortion */}
             <feTurbulence
               type="fractalNoise"
               baseFrequency={turbFreq}
@@ -86,33 +92,76 @@ export default function GlassSurface({
               yChannelSelector="G"
               result="displaced"
             />
-            {/* Saturation */}
-            <feColorMatrix
-              type="saturate"
-              values={`${saturation}`}
-              in="displaced"
-              result="saturated"
-            />
-            {/* Brightness */}
+            <feColorMatrix type="saturate" values={`${saturation}`} in="displaced" result="saturated" />
             <feComponentTransfer in="saturated" result="brightened">
               <feFuncR type="linear" slope={brightness * 0.09} />
               <feFuncG type="linear" slope={brightness * 0.09} />
               <feFuncB type="linear" slope={brightness * 0.09} />
             </feComponentTransfer>
           </filter>
+
+          {/* Refraction filter — applied via backdrop-filter url() to warp the pixels BEHIND the glass */}
+          <filter id={`${filterId}-refract`} x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+            <feTurbulence
+              type="turbulence"
+              baseFrequency="0.018 0.012"
+              numOctaves={2}
+              seed={7}
+              result="warpNoise"
+            />
+            <feDisplacementMap
+              in="SourceGraphic"
+              in2="warpNoise"
+              scale={Math.abs(distortionScale) * 0.055}
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
         </defs>
       </svg>
 
-      {/* ── Layer 1: Blurred frosted backdrop ── */}
-      {/* No borderRadius here — parent overflow:hidden clips all children to pill shape */}
+      {/* ── Layer 0: Frosted backdrop ── */}
+      {/* Mobile: single simple blur layer. Desktop: refraction warp + blur */}
       <div
         className="glass-surface-backdrop"
         style={{
-          backdropFilter: `blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2}) contrast(1.05)`,
-          WebkitBackdropFilter: `blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2}) contrast(1.05)`,
+          backdropFilter: isTouch
+            ? `blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2})`
+            : `url(#${filterId}-refract) blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2}) contrast(1.05)`,
+          WebkitBackdropFilter: isTouch
+            ? `blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2})`
+            : `url(#${filterId}-refract) blur(${blur}px) brightness(${1 + brightness * 0.05}) saturate(${saturation * 1.2}) contrast(1.05)`,
           background: `rgba(8, 18, 12, ${backgroundOpacity})`,
         }}
       />
+
+      {/* ── Chromatic fringe layers — desktop only, too expensive for mobile ── */}
+      {!isTouch && (
+        <>
+          <div
+            className="glass-surface-backdrop"
+            style={{
+              left: 2,
+              right: -2,
+              backdropFilter: `blur(${blur}px) hue-rotate(18deg) saturate(3)`,
+              WebkitBackdropFilter: `blur(${blur}px) hue-rotate(18deg) saturate(3)`,
+              opacity: 0.07,
+              mixBlendMode: 'screen',
+            }}
+          />
+          <div
+            className="glass-surface-backdrop"
+            style={{
+              left: -2,
+              right: 2,
+              backdropFilter: `blur(${blur}px) hue-rotate(-22deg) saturate(3)`,
+              WebkitBackdropFilter: `blur(${blur}px) hue-rotate(-22deg) saturate(3)`,
+              opacity: 0.07,
+              mixBlendMode: 'screen',
+            }}
+          />
+        </>
+      )}
 
       {/* ── Layer 2: Dark tinted base — gives glass depth ── */}
       <div

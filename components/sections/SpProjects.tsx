@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 import { FadeIn } from "@/components/ui";
 import {
@@ -39,7 +40,14 @@ export function SpProjects() {
                 {/* Project Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
                     {projects.map((project, idx) => (
-                        <FadeIn key={project.id} delay={idx * 0.1}>
+                        <motion.div
+                            key={project.id}
+                            initial={{ y: 28 }}
+                            whileInView={{ y: 0 }}
+                            viewport={{ once: true, margin: '-40px' }}
+                            transition={{ duration: 0.5, delay: idx * 0.09, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+                            className="h-full"
+                        >
                             <GlowingStarsBackgroundCard
                                 glowColor="#00e676"
                                 className="h-full flex flex-col"
@@ -66,7 +74,7 @@ export function SpProjects() {
 
                                 {/* Title & Description */}
                                 <GlowingStarsTitle>{project.title}</GlowingStarsTitle>
-                                <GlowingStarsDescription>{project.description}</GlowingStarsDescription>
+                                <p className="text-sm mt-2 leading-relaxed" style={{ color: '#8fac9c' }}>{project.description}</p>
 
                                 {/* Tech badges */}
                                 <div className="flex flex-wrap gap-2 mt-4">
@@ -87,7 +95,7 @@ export function SpProjects() {
 
                                 {/* Links */}
                                 {/* Card footer */}
-                                <div className="mt-6 pt-4 border-t border-[#1a3a2a] mt-auto">
+                                <div className="mt-6 pt-4 mt-auto" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
 
                                     {/* Top row: Live link + GitHub 3D button */}
                                     <div className="flex items-center gap-4 flex-wrap">
@@ -129,7 +137,7 @@ export function SpProjects() {
 
                                 </div>
                             </GlowingStarsBackgroundCard>
-                        </FadeIn>
+                        </motion.div>
                     ))}
                 </div>
 

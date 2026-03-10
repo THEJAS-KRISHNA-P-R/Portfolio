@@ -1,16 +1,23 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { SplitText, BlurText, Counter } from "@/components/ui";
 import { ShinyButton } from "@/components/ui/shiny-button";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { SocialButtons } from "@/components/ui/social-buttons";
 
+const fadeUp = (delay = 0) => ({
+    initial: { y: 28 },
+    animate: { y: 0 },
+    transition: { duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+});
+
 export function HeroSection() {
     const marqueeItems = [
         'PYTHON', 'NEXT.JS', 'REACT', 'FLUTTER', 'REACT NATIVE',
-        'MONGODB', 'FIREBASE', 'SUPABASE', 'TYPESCRIPT', 'TAILWIND',
+        'MongoDB Atlas', 'FIREBASE', 'SUPABASE', 'TAILWIND',
         'PYTHON', 'NEXT.JS', 'REACT', 'FLUTTER', 'REACT NATIVE',
-        'MONGODB', 'FIREBASE', 'SUPABASE', 'TYPESCRIPT', 'TAILWIND',
+        'MongoDB Atlas', 'FIREBASE', 'SUPABASE', 'TAILWIND',
     ];
 
     return (
@@ -24,8 +31,8 @@ export function HeroSection() {
                     {/* LEFT COLUMN */}
                     <div className="flex flex-col gap-6 w-full items-start justify-center h-full">
 
-                        {/* 2. NAME — the hero focal point */}
-                        <div>
+                        {/* NAME */}
+                        <motion.div {...fadeUp(0.1)}>
                             <h1
                                 className="font-display font-bold leading-[1.0] tracking-tight"
                                 style={{ fontSize: 'clamp(42px, 6vw, 72px)', color: '#e8f5e9' }}
@@ -38,27 +45,26 @@ export function HeroSection() {
                             >
                                 Krishna P R
                             </h1>
-                        </div>
+                        </motion.div>
 
-                        {/* 3. Role */}
-                        <p className="font-mono text-base" style={{ color: '#7aaa8a' }}>
+                        {/* Role */}
+                        <motion.p {...fadeUp(0.2)} className="font-mono text-base" style={{ color: '#9abfac' }}>
                             Full-Stack Developer & CS Student
-                        </p>
+                        </motion.p>
 
-                        {/* 4. Bio */}
-                        <p
+                        {/* Bio */}
+                        <motion.p
+                            {...fadeUp(0.3)}
                             className="text-base leading-relaxed max-w-md"
-                            style={{ color: '#6a9a7a' }}
+                            style={{ color: '#8fac9c' }}
                         >
-                            Building things for the web. CS Engineering @ Christ College, KTU.
+                            Building things for the web. CS Engineering <br />@ Christ College of Engineering (Autonomous), KTU.
                             Karate athlete. Currently exploring AI and Cybersecurity.
-                        </p>
+                        </motion.p>
 
-                        {/* 5. Stats row */}
-                        <div className="flex gap-10 mt-2 mb-2">
+                        {/* Stats row */}
+                        <motion.div {...fadeUp(0.38)} className="flex gap-10 mt-2 mb-2">
                             {[
-                                { value: '98.7%', label: 'CLASS X' },
-                                { value: '95.3%', label: 'CLASS XII' },
                                 { value: '5+', label: 'PROJECTS' },
                             ].map(({ value, label }) => (
                                 <div key={label} className="flex flex-col gap-1">
@@ -70,16 +76,16 @@ export function HeroSection() {
                                     </span>
                                     <span
                                         className="font-mono text-[10px] tracking-[0.15em]"
-                                        style={{ color: '#3d6b50' }}
+                                        style={{ color: '#4a7a5a' }}
                                     >
                                         {label}
                                     </span>
                                 </div>
                             ))}
-                        </div>
+                        </motion.div>
 
-                        {/* 6. CTA buttons */}
-                        <div className="flex items-center gap-4 flex-wrap mt-2">
+                        {/* CTA buttons */}
+                        <motion.div {...fadeUp(0.46)} className="flex items-center gap-4 flex-wrap mt-2">
                             <ShinyButton
                                 highlight="#00e676"
                                 highlightSubtle="#69f0ae"
@@ -97,19 +103,27 @@ export function HeroSection() {
                             </ShimmerButton>
 
                             <SocialButtons />
-                        </div>
+                        </motion.div>
                     </div>
 
-                    {/* RIGHT COLUMN */}
-                    <div className="flex items-center justify-center lg:justify-end pb-12 lg:pb-0">
+                    {/* RIGHT COLUMN — TK monogram */}
+                    <motion.div
+                        initial={{ scale: 0.92 }}
+                        animate={{ scale: 1 }}
+                        transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+                        className="flex items-center justify-center lg:justify-end pb-12 lg:pb-0"
+                    >
                         <div
-                            className="relative rounded-3xl flex flex-col items-center justify-center"
+                            className="relative rounded-3xl flex flex-col items-center justify-center hero-monogram"
                             style={{
                                 width: '300px',
                                 height: '300px',
-                                background: 'linear-gradient(135deg, #0d2018 0%, #0a1a14 60%, #050a0a 100%)',
+                                background: 'rgba(6, 18, 12, 0.35)',
+                                backdropFilter: 'blur(24px) saturate(160%)',
+                                WebkitBackdropFilter: 'blur(24px) saturate(160%)',
                                 border: '1px solid rgba(0,230,118,0.2)',
-                                boxShadow: '0 0 80px -20px rgba(0,230,118,0.3), inset 0 0 40px -20px rgba(0,230,118,0.1)',
+                                borderTop: '1px solid rgba(0,230,118,0.35)',
+                                boxShadow: '0 0 80px -20px rgba(0,230,118,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
                             }}
                         >
                             <span
@@ -128,18 +142,21 @@ export function HeroSection() {
                                 style={{
                                     background: 'rgba(0,230,118,0.08)',
                                     border: '1px solid rgba(0,230,118,0.2)',
-                                    color: '#5a8a6a',
+                                    color: '#7aaa8a',
                                 }}
                             >
                                 Christ College of Engineering
                             </div>
                         </div>
-                    </div>
+                    </motion.div>
                 </div>
             </div>
 
             {/* Tech Stack Marquee - Full Width */}
-            <div
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7, duration: 0.8 }}
                 className="w-full overflow-hidden mt-12"
                 style={{ maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)' }}
             >
@@ -153,14 +170,14 @@ export function HeroSection() {
                         <span
                             key={i}
                             className="text-xs font-mono tracking-[0.2em] uppercase flex items-center gap-3 shrink-0"
-                            style={{ color: '#2d5a3a' }}
+                            style={{ color: '#3a6a4a' }}
                         >
                             {tech}
                             <span style={{ color: '#1a3a2a' }}>•</span>
                         </span>
                     ))}
                 </div>
-            </div>
+            </motion.div>
         </section>
     );
 }

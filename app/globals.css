@@ -65,18 +65,11 @@ body,
   padding: 0;
   width: 100%;
   height: 100%;
-  /* Force zero-padding to allow edge-to-edge behind notch */
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  touch-action: none;
-  overscroll-behavior: none;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 @layer utilities {
@@ -413,6 +406,7 @@ body.game-mode {
   position: fixed;
   width: 100%;
   height: 100%;
+  touch-action: none;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: none;
 }
@@ -422,11 +416,44 @@ canvas {
   transform: translateZ(0);
   will-change: transform;
   image-rendering: auto;
+  touch-action: none;
 }
 
 canvas.low-quality {
   image-rendering: pixelated;
 }
+
+/* ── Hero monogram glow pulse — opacity-only so GPU can handle it ── */
+@keyframes monogram-glow {
+  0%, 100% { opacity: 0.82; }
+  50%       { opacity: 1; }
+}
+
+.hero-monogram {
+  animation: monogram-glow 4s ease-in-out infinite;
+  box-shadow: 0 0 80px -20px rgba(0,230,118,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* ── Liquid glass utility ──────────────────────────────────────── */
+.liquid-glass {
+  background: rgba(5, 14, 9, 0.28);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── Section label reveal animation ───────────────────────────── */
+@keyframes section-label-in {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.section-label-animate {
+  animation: section-label-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 
 /* ── Safe area insets (iPhone X+ notch, Android cutouts) ──────────── */
 :root {

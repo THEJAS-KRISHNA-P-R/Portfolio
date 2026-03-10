@@ -21,18 +21,22 @@ export const GlowingStarsBackgroundCard = ({
             onMouseLeave={() => setMouseEnter(false)}
             className={cn(
                 "relative p-6 rounded-2xl border transition-all duration-300",
-                "bg-[#0a1a14] border-[#1a3a2a]",
                 "hover:border-[#00e676]/30",
                 "after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px]",
                 "after:bg-[#ff4d7d] after:transition-all after:duration-300 after:rounded-bl-2xl",
                 "hover:after:w-[40%]",
                 className
             )}
-            style={
-                {
-                    "--glow": glowColor,
-                } as React.CSSProperties
-            }
+            style={{
+                background: 'rgba(5, 14, 9, 0.28)',
+                backdropFilter: 'blur(20px) saturate(155%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(155%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderTop: '1px solid rgba(255,255,255,0.13)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                ["--glow" as string]: glowColor,
+                willChange: 'transform',
+            }}
         >
             <div className="flex justify-center items-center mb-4">
                 <Illustration mouseEnter={mouseEnter} glowColor={glowColor} />

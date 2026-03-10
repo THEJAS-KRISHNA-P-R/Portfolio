@@ -84,33 +84,34 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 const initialProjects: Project[] = [
     {
         id: generateId(),
-        title: "HAXEUZ",
+        title: "HAXEUS",
         description: "Fully functional e-commerce application with modern frontend–backend integration, focusing on performance and UX.",
-        tech: ["Next.js", "MongoDB Atlas", "Supabase", "React"],
-        liveUrl: "#",
+        tech: ["Next.js", "Supabase", "React", "Upstash"],
+        liveUrl: "https://www.haxeus.in",
         githubUrl: "#"
     },
     {
         id: generateId(),
         title: "WhiteMatrix",
         description: "Candidate voting system with a secure admin panel, role-based access, and reliable one-time vote management.",
-        tech: ["React", "Firebase", "OAuth", "Role-Based Access"],
-        liveUrl: "#",
-        githubUrl: "#"
+        tech: ["React", "Supabase", "OAuth", "Role-Based Access"],
+        liveUrl: "https://whitematrix-voting.netlify.app",
+        githubUrl: "https://github.com/THEJAS-KRISHNA-P-R/whitematrix-voting"
     },
     {
         id: generateId(),
         title: "inthenow.",
         description: "Contributed to UI/UX design and responsive web development for a production-level platform.",
         tech: ["React", "Responsive Web", "UI/UX Design"],
-        liveUrl: "#"
+        liveUrl: "https://www.inthenow.world"
     },
     {
         id: generateId(),
         title: "Digital Repair Café",
         description: "First Prize, Project Expo — Christ College of Engineering, Oct 2025. Award-winning platform promoting sustainable electronics repair and reuse.",
         tech: ["Next.js", "Full-Stack", "Sustainability"],
-        liveUrl: "#"
+        liveUrl: "https://digitalrepaircafe.netlify.app/",
+        githubUrl: "https://github.com/THEJAS-KRISHNA-P-R/repairhub"
     },
     {
         id: generateId(),
@@ -125,15 +126,29 @@ const initialCerts: Certification[] = [
         id: generateId(),
         name: "React Native",
         issuer: "Meta (Coursera)",
-        date: "2024",
-        url: "#"
+        date: "Feb 2026",
+        url: "https://coursera.org/share/9fc10a87d926d25a60f5e6ad4ad9578e"
     },
     {
         id: generateId(),
         name: "Google Cybersecurity Professional",
         issuer: "Google (Coursera)",
-        date: "2024–25",
-        url: "#"
+        date: "Feb 2026",
+        url: "https://www.coursera.org/account/accomplishments/professional-cert/SU4OWOKL929U"
+    },
+    {
+        id: generateId(),
+        name: "Demysifying Networking",
+        issuer: "IIT Bombay (NPTEL)",
+        date: "Jul-Aug 2025",
+        url: "https://archive.nptel.ac.in/content/noc/NOC25/SEM2/Ecertificates/106/noc25-cs125/Course/NPTEL25CS125S64880044109160941.pdf"
+    },
+    {
+        id: generateId(),
+        name: "Introduction to Python Programming",
+        issuer: "IISc Bangalore (NPTEL)",
+        date: "Aug-Oct 2025",
+        url: "https://archive.nptel.ac.in/content/noc/NOC25/SEM2/Ecertificates/106/noc25-cs137/Course/NPTEL25CS137S97030015510935006.pdf"
     }
 ];
 

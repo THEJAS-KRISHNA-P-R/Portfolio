@@ -1,6 +1,24 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { FadeIn } from "@/components/ui";
+
+const fadeUp = (delay = 0) => ({
+    initial: { y: 20 },
+    whileInView: { y: 0 },
+    viewport: { once: true, margin: "-60px" },
+    transition: { duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+});
+
+// Glass style for education timeline cards
+const glassCard: React.CSSProperties = {
+    background: 'rgba(5, 14, 9, 0.3)',
+    backdropFilter: 'blur(16px) saturate(150%)',
+    WebkitBackdropFilter: 'blur(16px) saturate(150%)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+    willChange: 'backdrop-filter',
+};
 
 export function AboutSkills() {
     return (
@@ -27,22 +45,19 @@ export function AboutSkills() {
                     </div>
 
                     {/* Bio Paragraph */}
-                    <p className="font-body max-w-[460px]" style={{ color: '#8fbc9f', lineHeight: '1.85', fontSize: '16px' }}>
+                    <motion.p {...fadeUp(0.15)} className="font-body max-w-[460px]" style={{ color: '#aacfba', lineHeight: '1.85', fontSize: '16px' }}>
                         I'm a Full-Stack Developer and Computer Science Engineering student currently studying at Christ College of Engineering, KTU.
-                        I specialize in building rich, interactive web applications using Next.js and React Three Fiber.
+                        I specialize in building rich, interactive web applications, I am familiar with Next.js, React, Flutter, React Native Frameworks.
                         Beyond the screen, I am a passionate sports enthusiast and athlete, holding multiple State-Level Karate medals.
                         My journey bridges logical problem-solving in software engineering with discipline developed through martial arts.
-                    </p>
+                    </motion.p>
 
                     {/* Education Timeline */}
-                    <div className="flex flex-col gap-4 mt-4 max-w-[460px]">
+                    <motion.div {...fadeUp(0.25)} className="flex flex-col gap-4 mt-4 max-w-[460px]">
 
                         {/* Timelin Entry: B.Tech */}
                         <div className="relative overflow-hidden rounded-[16px] p-5"
-                            style={{
-                                background: 'rgba(10,26,20,0.6)',
-                                border: '1px solid rgba(0,230,118,0.08)'
-                            }}>
+                            style={glassCard}>
                             <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-[var(--color-primary)] rounded-r-[2px]" />
 
                             <div className="flex justify-between items-start mb-2 pl-2">
@@ -61,10 +76,7 @@ export function AboutSkills() {
 
                         {/* Timeline Entry: Class XII */}
                         <div className="relative overflow-hidden rounded-[16px] p-5"
-                            style={{
-                                background: 'rgba(10,26,20,0.6)',
-                                border: '1px solid rgba(0,230,118,0.08)'
-                            }}>
+                            style={glassCard}>
                             <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-[var(--color-yellow)] rounded-r-[2px]" />
 
                             <div className="flex justify-between items-start mb-2 pl-2">
@@ -83,10 +95,7 @@ export function AboutSkills() {
 
                         {/* Timeline Entry: Class X */}
                         <div className="relative overflow-hidden rounded-[16px] p-5"
-                            style={{
-                                background: 'rgba(10,26,20,0.6)',
-                                border: '1px solid rgba(0,230,118,0.08)'
-                            }}>
+                            style={glassCard}>
                             <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-[var(--color-pink)] rounded-r-[2px]" />
 
                             <div className="flex justify-between items-start mb-2 pl-2">
@@ -103,7 +112,7 @@ export function AboutSkills() {
                             </div>
                         </div>
 
-                    </div>
+                    </motion.div>
                 </div>
 
                 {/* RIGHT COLUMN: Skills */}
@@ -119,8 +128,8 @@ export function AboutSkills() {
                             <div className="flex flex-col gap-3">
                                 <div className="font-mono uppercase" style={{ color: '#4a7a5a', fontSize: '11px', letterSpacing: '0.15em' }}>Languages</div>
                                 <div className="flex flex-wrap gap-2">
-                                    {["Python", "JavaScript", "TypeScript", "C/C++", "Java", "SQL"].map((skill, i) => {
-                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB', 'Firebase'].includes(skill)
+                                    {["Python", "JavaScript", "C/C++", "Java", "SQL"].map((skill, i) => {
+                                        const isPrimary = ['Python', 'Next.js', 'React', 'Flutter', 'MongoDB Atlas', 'Firebase'].includes(skill)
                                         return (
                                             <span
                                                 key={skill}
@@ -159,8 +168,8 @@ export function AboutSkills() {
                             <div className="flex flex-col gap-3">
                                 <div className="font-mono uppercase" style={{ color: '#4a7a5a', fontSize: '11px', letterSpacing: '0.15em' }}>Frameworks</div>
                                 <div className="flex flex-wrap gap-2">
-                                    {["Next.js", "React", "React Three Fiber", "TailwindCSS"].map((skill, i) => {
-                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB', 'Firebase'].includes(skill)
+                                    {["Next.js", "React", "TailwindCSS"].map((skill, i) => {
+                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB Atlas', 'Firebase'].includes(skill)
                                         return (
                                             <span
                                                 key={skill}
@@ -200,7 +209,7 @@ export function AboutSkills() {
                                 <div className="font-mono uppercase" style={{ color: '#4a7a5a', fontSize: '11px', letterSpacing: '0.15em' }}>Mobile</div>
                                 <div className="flex flex-wrap gap-2">
                                     {["Flutter", "React Native"].map((skill, i) => {
-                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB', 'Firebase'].includes(skill)
+                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB Atlas', 'Firebase'].includes(skill)
                                         return (
                                             <span
                                                 key={skill}
@@ -239,8 +248,8 @@ export function AboutSkills() {
                             <div className="flex flex-col gap-3">
                                 <div className="font-mono uppercase" style={{ color: '#4a7a5a', fontSize: '11px', letterSpacing: '0.15em' }}>Backend & DB</div>
                                 <div className="flex flex-wrap gap-2">
-                                    {["MongoDB", "Firebase", "Supabase", "PostgreSQL", "Prisma"].map((skill, i) => {
-                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB', 'Firebase'].includes(skill)
+                                    {["MongoDB Atlas", "Firebase", "Supabase", "PostgreSQL"].map((skill, i) => {
+                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB Atlas', 'Firebase'].includes(skill)
                                         return (
                                             <span
                                                 key={skill}
@@ -280,7 +289,7 @@ export function AboutSkills() {
                                 <div className="font-mono uppercase" style={{ color: '#4a7a5a', fontSize: '11px', letterSpacing: '0.15em' }}>AI / ML</div>
                                 <div className="flex flex-wrap gap-2">
                                     {["Deep Learning", "TensorFlow", "Computer Vision"].map((skill, i) => {
-                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB', 'Firebase'].includes(skill)
+                                        const isPrimary = ['Python', 'Next.js', 'React', 'TypeScript', 'Flutter', 'MongoDB Atlas', 'Firebase'].includes(skill)
                                         return (
                                             <span
                                                 key={skill}
@@ -317,8 +326,9 @@ export function AboutSkills() {
                     {/* Karate Highlight Card */}
                     <div className="mt-8 flex items-center p-4 rounded-[16px] gap-4"
                         style={{
-                            border: '1px solid rgba(255,77,125,0.15)',
-                            background: 'rgba(10,26,20,0.4)'
+                            ...glassCard,
+                            border: '1px solid rgba(255,77,125,0.18)',
+                            borderTop: '1px solid rgba(255,77,125,0.30)',
                         }}>
                         <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl shrink-0"
                             style={{ background: 'rgba(255,77,125,0.1)' }}>

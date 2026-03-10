@@ -170,7 +170,7 @@ const EDUCATION = [
 
 ```
 Motivated Computer Science Engineering student with hands-on experience in
-full-stack web development using Flutter, JavaScript, React, Next.js, MongoDB
+full-stack web development using Flutter, JavaScript, React, Next.js, MongoDB atlas
 Atlas, Supabase, and Firebase. Skilled in Python and C with a strong
 understanding of algorithms, networking, and emerging technologies including
 Generative AI. Currently enhancing cybersecurity expertise through Coursera

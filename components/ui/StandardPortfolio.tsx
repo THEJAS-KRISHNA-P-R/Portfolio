@@ -93,39 +93,39 @@ export function StandardPortfolio() {
             {/* Navigation rendered by global <Navbar /> in ClientLayout.tsx */}
 
             {/* Main Formatted Layout Wrapper for Sections  */}
-            <main className="pt-24 pb-20 w-full flex flex-col gap-0">
+            <main className="pt-20 pb-20 w-full flex flex-col gap-0">
 
                 <FadeIn>
                     <HeroSection />
                 </FadeIn>
 
                 <FadeIn>
-                    <section id="about" className="relative py-28 overflow-hidden">
-                        <div className="max-w-6xl mx-auto px-8 lg:px-16">
+                    <section id="about" className="relative py-20 overflow-hidden">
+                        <div className="max-w-6xl mx-auto px-5 lg:px-16">
                             <AboutSkills />
                         </div>
                     </section>
                 </FadeIn>
 
                 <FadeIn>
-                    <section id="projects" className="relative py-28 overflow-hidden">
-                        <div className="max-w-6xl mx-auto px-8 lg:px-16">
+                    <section id="projects" className="relative py-20 overflow-hidden">
+                        <div className="max-w-6xl mx-auto px-5 lg:px-16">
                             <SpProjects />
                         </div>
                     </section>
                 </FadeIn>
 
                 <FadeIn>
-                    <section id="achievements" className="relative py-28 overflow-hidden">
-                        <div className="max-w-6xl mx-auto px-8 lg:px-16">
+                    <section id="achievements" className="relative py-20 overflow-hidden">
+                        <div className="max-w-6xl mx-auto px-5 lg:px-16">
                             <SpAchievements />
                         </div>
                     </section>
                 </FadeIn>
 
                 <FadeIn>
-                    <section id="contact" className="relative py-28 overflow-hidden">
-                        <div className="max-w-6xl mx-auto px-8 lg:px-16">
+                    <section id="contact" className="relative py-20 overflow-hidden">
+                        <div className="max-w-6xl mx-auto px-5 lg:px-16">
                             <SpContact />
                         </div>
                     </section>
