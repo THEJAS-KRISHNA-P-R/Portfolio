@@ -60,15 +60,15 @@ export function StandardPortfolio() {
                     topColor="#000000"
                     bottomColor="#249b22"
                     intensity={1}
-                    rotationSpeed={0.13}
-                    glowAmount={0.008}
-                    pillarWidth={2.5}
-                    pillarHeight={0.5}
+                    rotationSpeed={0.52}
+                    glowAmount={0.0018}
+                    pillarWidth={4.5}
+                    pillarHeight={0.6}
                     noiseIntensity={0}
                     pillarRotation={40}
                     interactive={false}
                     mixBlendMode="screen"
-                    quality="low"
+                    quality="high"
                 />
             </div>
 
