@@ -5,11 +5,11 @@ import { FadeIn } from "@/components/ui";
 import dynamic from "next/dynamic";
 
 const LightPillar = dynamic(() => import("@/components/ui/reactbits/LightPillar"), { ssr: false });
-import { HeroSection } from "@/components/sections/HeroSection";
-import { AboutSkills } from "@/components/sections/AboutSkills";
-import { SpProjects } from "@/components/sections/SpProjects";
-import { SpAchievements } from "@/components/sections/SpAchievements";
-import { SpContact } from "@/components/sections/SpContact";
+const HeroSection = dynamic(() => import("@/components/sections/HeroSection").then(m => ({ default: m.HeroSection })), { ssr: false });
+const AboutSkills = dynamic(() => import("@/components/sections/AboutSkills").then(m => ({ default: m.AboutSkills })), { ssr: false });
+const SpProjects = dynamic(() => import("@/components/sections/SpProjects").then(m => ({ default: m.SpProjects })), { ssr: false });
+const SpAchievements = dynamic(() => import("@/components/sections/SpAchievements").then(m => ({ default: m.SpAchievements })), { ssr: false });
+const SpContact = dynamic(() => import("@/components/sections/SpContact").then(m => ({ default: m.SpContact })), { ssr: false });
 import { ArrowUp } from "lucide-react";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
 
@@ -22,21 +22,32 @@ export function StandardPortfolio() {
         // Enable smooth scrolling on the html element
         document.documentElement.style.scrollBehavior = 'smooth';
 
+        let rafPending = false;
         const handleScroll = () => {
-            setIsScrolled(window.scrollY > 400);
+            if (rafPending) return;
+            rafPending = true;
+            requestAnimationFrame(() => {
+                setIsScrolled(window.scrollY > 400);
+                rafPending = false;
+            });
         };
 
-        window.addEventListener("scroll", handleScroll);
+        window.addEventListener("scroll", handleScroll, { passive: true });
 
         // Auto-scroll to zone section if coming from the 3D world
         if (scrollTarget) {
             setTimeout(() => {
                 const el = document.getElementById(scrollTarget);
                 if (el) {
-                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    const lenis = (window as any).__lenis;
+                    if (lenis) {
+                        lenis.scrollTo(el, { offset: -80, duration: 1.2 });
+                    } else {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
                 }
                 setScrollTarget(null);
-            }, 400); // wait for page to mount
+            }, 400);
         }
 
         return () => {
@@ -46,7 +57,12 @@ export function StandardPortfolio() {
     }, [scrollTarget, setScrollTarget]);
 
     const scrollToTop = () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const lenis = (window as any).__lenis;
+        if (lenis) {
+            lenis.scrollTo(0, { duration: 1.2 });
+        } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     };
 
     return (

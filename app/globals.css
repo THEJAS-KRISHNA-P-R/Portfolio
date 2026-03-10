@@ -67,6 +67,22 @@ body,
   height: 100%;
 }
 
+/* Lenis requires html/body to have auto height so it can measure scroll distance.
+   This overrides the height:100% above only when Lenis is active. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+/* Lenis manages scroll momentum — native scroll-behavior must be disabled */
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
@@ -466,11 +482,10 @@ canvas.low-quality {
 }
 
 /* ── Mobile scroll & paint performance ────────────────────────────── */
-html { scroll-behavior: smooth; }
+/* scroll-behavior is managed by Lenis on desktop; native on mobile */
 
-/* Contain layout/paint per section — off-screen sections don't cause
-   full-page reflow during scroll */
-section { contain: layout style; }
+/* Contain paint per section — does not affect scroll */
+section { contain: style; }
 
 /* Kill tap flash highlight on all interactive elements */
 * { -webkit-tap-highlight-color: transparent; }

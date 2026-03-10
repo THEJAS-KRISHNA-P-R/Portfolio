@@ -41,8 +41,13 @@ export function Navbar() {
     const id = href.replace("/#", "")
     const el = document.getElementById(id)
     if (el) {
-      const offsetPosition = el.getBoundingClientRect().top + window.scrollY - 80
-      window.scrollTo({ top: offsetPosition, behavior: "smooth" })
+      const lenis = (window as any).__lenis
+      if (lenis) {
+        lenis.scrollTo(el, { offset: -80, duration: 1.2 })
+      } else {
+        const offsetPosition = el.getBoundingClientRect().top + window.scrollY - 80
+        window.scrollTo({ top: offsetPosition, behavior: "smooth" })
+      }
       window.history.pushState(null, "", href)
     }
   }

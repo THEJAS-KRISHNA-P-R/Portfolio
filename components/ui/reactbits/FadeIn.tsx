@@ -47,7 +47,7 @@ export default function FadeIn({
     return (
         <div
             ref={ref}
-            className={`transition-all duration-700 ease-out ${isVisible ? "translate-x-0 translate-y-0" : getInitialStyle()} ${className}`}
+            className={`transition-transform duration-700 ease-out ${isVisible ? "translate-x-0 translate-y-0" : getInitialStyle()} ${className}`}
             style={{ transitionDelay: `${delay}ms` }}
         >
             {children}
