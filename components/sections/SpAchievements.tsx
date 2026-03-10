@@ -305,7 +305,6 @@ function AchievementCard({
             initial={{ y: 16 }}
             whileInView={{ y: 0 }}
             viewport={{ once: true, margin: '-40px' }}
-            whileHover={{ y: -3 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
             className={`rounded-2xl ${padding} flex flex-col gap-3 relative overflow-hidden`}
             style={{

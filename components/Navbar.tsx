@@ -151,7 +151,7 @@ export function Navbar() {
         initial={{ opacity: 0, y: -18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="md:hidden fixed top-0 left-0 right-0 z-[200] px-3 pt-3"
+        className="md:hidden fixed top-0 left-0 right-0 z-[200] px-3 pt-4 pb-3"
         style={{ willChange: "transform", transform: "translateZ(0)" }}
       >
         <GlassSurface
@@ -170,7 +170,7 @@ export function Navbar() {
           saturation={2.2}
           className="w-full glass-surface-fixed"
         >
-          <div className="flex items-center w-full px-4 gap-2">
+          <div className="flex items-center w-full px-5 gap-3">
             <Link
               href="/"
               onClick={(e) => {

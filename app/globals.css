@@ -68,6 +68,8 @@ body,
 }
 
 body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
@@ -461,4 +463,32 @@ canvas.low-quality {
   --safe-left:   env(safe-area-inset-left,   0px);
   --safe-right:  env(safe-area-inset-right,  0px);
   --safe-top:    env(safe-area-inset-top,    0px);
+}
+
+/* ── Mobile scroll & paint performance ────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* Contain layout/paint per section — off-screen sections don't cause
+   full-page reflow during scroll */
+section { contain: layout style; }
+
+/* Kill tap flash highlight on all interactive elements */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Disable expensive CSS hover effects on touch screens */
+@media (pointer: coarse) {
+  .pink-card-hover::after,
+  .pink-accent-line::after,
+  .pink-nav-link::after { display: none; }
+  .pink-card-hover:hover,
+  .pink-underside:hover { box-shadow: none !important; }
+}
+
+/* Respect system reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

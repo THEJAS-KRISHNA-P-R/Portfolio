@@ -60,7 +60,7 @@ export function StandardPortfolio() {
                     topColor="#000000"
                     bottomColor="#249b22"
                     intensity={1}
-                    rotationSpeed={0.52}
+                    rotationSpeed={0.2}
                     glowAmount={0.0018}
                     pillarWidth={4.5}
                     pillarHeight={0.6}
