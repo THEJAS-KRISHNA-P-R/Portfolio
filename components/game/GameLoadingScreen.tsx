@@ -5,11 +5,17 @@ import { CommitsGrid } from "@/components/ui/commits-grid"
 
 interface GameLoadingScreenProps {
     onComplete?: () => void
+    onViewPortfolio?: () => void
     progress?: number
     message?: string
 }
 
-export function GameLoadingScreen({ onComplete, progress: externalProgress, message: externalMessage }: GameLoadingScreenProps) {
+export function GameLoadingScreen({
+    onComplete,
+    onViewPortfolio,
+    progress: externalProgress,
+    message: externalMessage
+}: GameLoadingScreenProps) {
     const [internalProgress, setInternalProgress] = useState(0)
     const [phase, setPhase] = useState<'loading' | 'ready' | 'launching'>('loading')
     const [opacity, setOpacity] = useState(1)
@@ -174,12 +180,12 @@ export function GameLoadingScreen({ onComplete, progress: externalProgress, mess
                 padding: '0 2rem',
             }}>
 
-                {/* TK monogram */}
+                {/* TK monogram — unchanged */}
                 <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
                     <CommitsGrid text="THEJAS" className="w-[160px]" />
                 </div>
 
-                {/* Name */}
+                {/* Name — unchanged */}
                 <h1 style={{
                     margin: '0 0 0.25rem',
                     fontSize: '1.05rem',
@@ -192,7 +198,7 @@ export function GameLoadingScreen({ onComplete, progress: externalProgress, mess
                     Thejas Krishna P R
                 </h1>
 
-                {/* Subtitle */}
+                {/* Subtitle — unchanged */}
                 <p style={{
                     margin: '0 0 2.5rem',
                     fontSize: '0.6rem',
@@ -204,57 +210,34 @@ export function GameLoadingScreen({ onComplete, progress: externalProgress, mess
                     Portfolio World
                 </p>
 
-                {/* ── Progress bar ───────────────────────────────────────────── */}
+                {/* ── Progress bar — unchanged ───────────────────────── */}
                 {phase === 'loading' && (
                     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                        {/* Bar track */}
                         <div style={{
-                            width: '100%',
-                            height: '2px',
+                            width: '100%', height: '2px',
                             background: 'rgba(255,255,255,0.06)',
-                            borderRadius: '9999px',
-                            overflow: 'hidden',
+                            borderRadius: '9999px', overflow: 'hidden',
                         }}>
                             <div style={{
-                                height: '100%',
-                                width: `${progress}%`,
+                                height: '100%', width: `${progress}%`,
                                 background: 'linear-gradient(to right, rgba(0,230,118,0.6), #00e676)',
-                                borderRadius: '9999px',
-                                transition: 'width 0.1s linear',
+                                borderRadius: '9999px', transition: 'width 0.1s linear',
                                 boxShadow: '0 0 8px rgba(0,230,118,0.4)',
                             }} />
                         </div>
-
-                        {/* Status row */}
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                        }}>
-                            {externalMessage ? (
-                                <span style={{
-                                    fontSize: '0.6rem',
-                                    color: 'rgba(255,255,255,0.3)',
-                                    letterSpacing: '0.06em',
-                                }}>
-                                    {externalMessage}
-                                </span>
-                            ) : (
-                                <LoadingStatus progress={progress} />
-                            )}
-                            <span style={{
-                                fontSize: '0.65rem',
-                                color: '#00e676',
-                                letterSpacing: '0.05em',
-                                fontVariantNumeric: 'tabular-nums',
-                            }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            {externalMessage
+                                ? <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em' }}>{externalMessage}</span>
+                                : <LoadingStatus progress={progress} />
+                            }
+                            <span style={{ fontSize: '0.65rem', color: '#00e676', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
                                 {progress}%
                             </span>
                         </div>
                     </div>
                 )}
 
-                {/* ── Enter button ───────────────────────────────────────────── */}
+                {/* ── Enter World button (ready phase only) ─────────── */}
                 {phase === 'ready' && (
                     <div style={{
                         display: 'flex',
@@ -262,37 +245,140 @@ export function GameLoadingScreen({ onComplete, progress: externalProgress, mess
                         alignItems: 'center',
                         gap: '0.75rem',
                         animation: 'fadeSlideUp 0.5s ease forwards',
+                        width: '100%',
                     }}>
-                        <button
-                            onClick={handleLaunch}
-                            className="hud-portfolio-btn"
-                        >
-                            <div className="btn-outer">
-                                <div className="btn-inner">
-                                    <span>Enter World</span>
+                        {/* PC: side by side. Mobile: stacked */}
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.75rem',
+                            width: '100%',
+                            flexWrap: 'wrap',   // wraps to column on narrow screens
+                        }}>
+                            <button onClick={handleLaunch} className="hud-portfolio-btn">
+                                <div className="btn-outer">
+                                    <div className="btn-inner">
+                                        <span>Enter World</span>
+                                    </div>
                                 </div>
-                            </div>
-                        </button>
+                            </button>
+
+                            <button
+                                onClick={onViewPortfolio}
+                                style={{
+                                    padding: '0.75em 1.5em',
+                                    background: '#050a0a',
+                                    border: '1px solid rgba(0, 191, 255, 0.3)',
+                                    borderRadius: '100em',
+                                    color: 'rgba(0, 191, 255, 0.75)',
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                    fontSize: '0.65rem',
+                                    letterSpacing: '0.1em',
+                                    textTransform: 'uppercase',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 0 15px rgba(0, 191, 255, 0.05)',
+                                }}
+                                onMouseEnter={e => {
+                                    const btn = e.currentTarget
+                                    btn.style.borderColor = 'rgba(0, 191, 255, 0.7)'
+                                    btn.style.color = '#ffffff'
+                                    btn.style.boxShadow = '0 0 25px rgba(0, 191, 255, 0.15), inset 0 0 10px rgba(0, 191, 255, 0.1)'
+                                    btn.style.transform = 'translateY(-1px)'
+                                }}
+                                onMouseLeave={e => {
+                                    const btn = e.currentTarget
+                                    btn.style.borderColor = 'rgba(0, 191, 255, 0.3)'
+                                    btn.style.color = 'rgba(0, 191, 255, 0.75)'
+                                    btn.style.boxShadow = '0 0 15px rgba(0, 191, 255, 0.05)'
+                                    btn.style.transform = 'translateY(0)'
+                                }}
+                            >
+                                <div style={{
+                                    position: 'absolute', inset: 0,
+                                    backgroundImage: 'linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.1), transparent)',
+                                    backgroundSize: '200% 100%',
+                                    animation: 'btnShimmer 3s infinite linear',
+                                    pointerEvents: 'none'
+                                }} />
+                                <span style={{ position: 'relative', zIndex: 1 }}>View Portfolio</span>
+                            </button>
+                        </div>
+
                         <p style={{
-                            fontSize: '0.55rem',
-                            color: 'rgba(255,255,255,0.18)',
-                            letterSpacing: '0.1em',
-                            textTransform: 'uppercase',
-                            margin: 0,
+                            fontSize: '0.55rem', color: 'rgba(255,255,255,0.18)',
+                            letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0,
                         }}>
                             Press Enter or tap to continue
                         </p>
                     </div>
                 )}
 
-                {/* Launching state */}
+                {/* ── View Portfolio button — visible during loading AND launching ── */}
+                {(phase === 'loading' || phase === 'launching') && (
+                    <div style={{ marginTop: '1.8rem', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                        <button
+                            onClick={onViewPortfolio}
+                            style={{
+                                padding: '0.6rem 1.3rem',
+                                background: '#050a0a',
+                                border: '1px solid rgba(0, 191, 255, 0.25)',
+                                borderRadius: '100em',
+                                color: 'rgba(0, 191, 255, 0.65)',
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: '0.62rem',
+                                letterSpacing: '0.12em',
+                                textTransform: 'uppercase',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                boxShadow: '0 0 12px rgba(0, 191, 255, 0.04)',
+                            }}
+                            onMouseEnter={e => {
+                                const btn = e.currentTarget
+                                btn.style.borderColor = 'rgba(0, 191, 255, 0.6)'
+                                btn.style.color = '#ffffff'
+                                btn.style.boxShadow = '0 0 20px rgba(0, 191, 255, 0.12)'
+                                btn.style.transform = 'translateY(-1px)'
+                            }}
+                            onMouseLeave={e => {
+                                const btn = e.currentTarget
+                                btn.style.borderColor = 'rgba(0, 191, 255, 0.25)'
+                                btn.style.color = 'rgba(0, 191, 255, 0.65)'
+                                btn.style.boxShadow = '0 0 12px rgba(0, 191, 255, 0.04)'
+                                btn.style.transform = 'translateY(0)'
+                            }}
+                        >
+                            <div style={{
+                                position: 'absolute', inset: 0,
+                                background: 'linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.08), transparent)',
+                                backgroundSize: '200% 100%',
+                                animation: 'btnShimmer 4s infinite linear',
+                                pointerEvents: 'none'
+                            }} />
+                            <span style={{ position: 'relative', zIndex: 1 }}>View Portfolio →</span>
+                        </button>
+                    </div>
+                )}
+
+                {/* Launching state — unchanged */}
                 {phase === 'launching' && (
                     <p style={{
-                        fontSize: '0.65rem',
-                        color: 'rgba(0,230,118,0.5)',
-                        letterSpacing: '0.2em',
-                        textTransform: 'uppercase',
-                        animation: 'pulse 0.6s infinite',
+                        fontSize: '0.65rem', color: 'rgba(0,230,118,0.5)',
+                        letterSpacing: '0.2em', textTransform: 'uppercase',
+                        animation: 'pulse 0.6s infinite', marginTop: '0.75rem',
                     }}>
                         Initializing...
                     </p>
@@ -328,7 +414,7 @@ export function GameLoadingScreen({ onComplete, progress: externalProgress, mess
                 pointerEvents: 'none',
             }}>
                 <div>CREATIVE DEV</div>
-                <div>© TKPR 2025</div>
+                <div>© TKPR 2026</div>
             </div>
 
             <style>{`

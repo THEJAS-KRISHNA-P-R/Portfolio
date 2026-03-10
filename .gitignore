@@ -36,3 +36,9 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# Blender source files — never deploy
+public/75-chevrolet_camaro_ss/
+*.blend
+*.obj
+*.mtl

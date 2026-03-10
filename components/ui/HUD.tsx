@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { useQualityStore } from "@/store/useQualityStore"
 import { gameState } from "@/components/game/Car"
 import { MazeMode } from "@/components/game/MazeModeModal"
+import { InfoModal } from "@/components/ui/InfoModal"
 
 function HighScoreBadge({ score }: { score: number }) {
     const [visible, setVisible] = useState(false)
@@ -74,6 +76,10 @@ export default function HUD() {
     const [mazeResult, setMazeResult] = useState<{ mode: MazeMode, time?: number, hits?: number, isNewBest?: boolean } | null>(null)
     const [mazeTimer, setMazeTimer] = useState(0)
     const [timerActive, setTimerActive] = useState(false)
+    const [infoOpen, setInfoOpen] = useState(false)
+
+    const profile = useQualityStore(s => s.profile)
+    const isMobile = profile?.isMobile ?? false
 
     const mazeHits = usePortfolioStore(s => s.mazeHits)
     const mazeBestTime = usePortfolioStore(s => s.mazeBestTime)
@@ -272,6 +278,37 @@ export default function HUD() {
                 </div>
             )}
 
+            {/* ── TOP RIGHT — Info Button (PC/Desktop only, hidden in maze) ── */}
+            {!mazeRunning && !isMobile && (
+                <div style={{
+                    position: 'fixed', top: 'min(1.5rem, 3vh)', right: 'min(1rem, 4vw)',
+                    zIndex: 260, pointerEvents: 'auto',
+                }}>
+                    <button
+                        onClick={() => setInfoOpen(true)}
+                        style={{
+                            width: '40px', height: '40px', borderRadius: '50%',
+                            background: 'rgba(4,14,9,0.78)', backdropFilter: 'blur(12px)',
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            color: 'rgba(255,255,255,0.55)',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '1.1rem', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace",
+                            transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'
+                            e.currentTarget.style.color = '#ffffff'
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+                            e.currentTarget.style.color = 'rgba(255,255,255,0.55)'
+                        }}
+                    >
+                        i
+                    </button>
+                </div>
+            )}
+
             {/* ── BOTTOM LEFT — Turbo ── */}
             <div style={{
                 position: 'absolute', bottom: '1.5rem', left: '1rem',
@@ -390,6 +427,12 @@ export default function HUD() {
                     `}</style>
                 </div>
             )}
+            {/* ── Info Modal ───────────────────────────────────────────────── */}
+            <InfoModal
+                open={infoOpen}
+                onClose={() => setInfoOpen(false)}
+                isMobile={false}
+            />
         </div>
     )
 }

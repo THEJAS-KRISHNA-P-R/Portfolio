@@ -12,20 +12,22 @@ interface Props {
     position: [number, number, number]
     rotation?: [number, number, number]   // Euler in radians
     game: GameType
+    deviceId: string
 }
 
 // Board dimensions in world units
 const BOARD_W = 6
-const BOARD_H = 3.2
+const BOARD_H = 4.2
 
-// Canvas resolution — keep low to avoid GPU memory waste
-const TEX_W = 512
-const TEX_H = 256
+// Canvas resolution
+const TEX_W = 1024
+const TEX_H = 512
 
 function drawBoard(
     ctx: CanvasRenderingContext2D,
     entries: LeaderboardEntry[],
-    game: GameType
+    game: GameType,
+    playerRow: { rank: number; entry: LeaderboardEntry } | null
 ): void {
     const W = TEX_W
     const H = TEX_H
@@ -112,23 +114,94 @@ function drawBoard(
         ctx.textAlign = 'right'
         ctx.fillText(scoreText, COL_SCORE, y)
     })
+
+    // Only draw player row if they exist AND are not already in top 5
+    const playerInTop5 = playerRow
+        ? entries.some(e => e.deviceId === playerRow.entry.deviceId)
+        : false
+
+    if (playerRow && !playerInTop5) {
+        const y = H - 28
+
+        // Separator line
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(24, y - 22)
+        ctx.lineTo(W - 24, y - 22)
+        ctx.stroke()
+
+        // "YOU" label
+        ctx.font = '10px "JetBrains Mono", monospace'
+        ctx.fillStyle = 'rgba(255,255,255,0.35)'
+        ctx.textAlign = 'left'
+        ctx.fillText('YOU', 20, y - 8)
+
+        // Rank
+        ctx.font = 'bold 13px "JetBrains Mono", monospace'
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'
+        ctx.textAlign = 'left'
+        ctx.fillText(`#${playerRow.rank}`, 20, y + 10)
+
+        // Name
+        const name = playerRow.entry.playerName.length > 14
+            ? playerRow.entry.playerName.slice(0, 13) + '…'
+            : playerRow.entry.playerName
+        ctx.font = '13px "JetBrains Mono", monospace'
+        ctx.fillStyle = '#ffffff'
+        ctx.textAlign = 'left'
+        ctx.fillText(name, 72, y + 10)
+
+        // Score
+        const scoreText = game === 'football'
+            ? `${playerRow.entry.score} pts`
+            : formatMazeTime(playerRow.entry.time)
+        ctx.font = 'bold 13px "JetBrains Mono", monospace'
+        ctx.fillStyle = '#00bfff'   // blue — distinguishes from top5 green
+        ctx.textAlign = 'right'
+        ctx.fillText(scoreText, W - 28, y + 10)
+    }
 }
 
 export const LeaderboardBoard = memo(function LeaderboardBoard({
     position,
     rotation = [-Math.PI / 12, 0, 0],   // 15° tilt back — faces player at car height
     game,
+    deviceId,
 }: Props) {
     const meshRef = useRef<THREE.Mesh>(null)
     const texRef = useRef<THREE.CanvasTexture | null>(null)
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const [entries, setEntries] = useState<LeaderboardEntry[]>([])
+    const [playerRow, setPlayerRow] = useState<{ rank: number; entry: LeaderboardEntry } | null>(null)
     const lastFetch = useRef(0)
 
-    // Initial fetch
+    async function refresh() {
+        const all = await fetchLeaderboard(game, Infinity)
+        const top = all.slice(0, LB_CONFIG.TOP_N)
+        setEntries(top)
+
+        // Find this device's rank in the full sorted list
+        const idx = all.findIndex(e => e.deviceId === deviceId)
+        if (idx !== -1) {
+            setPlayerRow({ rank: idx + 1, entry: all[idx] })
+        } else {
+            setPlayerRow(null)
+        }
+    }
+
+    // Initial fetch & event listener
     useEffect(() => {
-        fetchLeaderboard(game).then(setEntries)
-    }, [game])
+        refresh()
+
+        const onUpdated = (e: Event) => {
+            const d = (e as CustomEvent).detail
+            if (d.game === game) refresh()
+        }
+
+        window.addEventListener('leaderboard:updated', onUpdated)
+        return () => window.removeEventListener('leaderboard:updated', onUpdated)
+    }, [game, deviceId])
 
     // Create canvas texture once
     useEffect(() => {
@@ -137,6 +210,8 @@ export const LeaderboardBoard = memo(function LeaderboardBoard({
         canvas.height = TEX_H
         canvasRef.current = canvas
         const tex = new THREE.CanvasTexture(canvas)
+        tex.anisotropy = 4
+        tex.needsUpdate = true
         texRef.current = tex
 
         if (meshRef.current) {
@@ -152,16 +227,16 @@ export const LeaderboardBoard = memo(function LeaderboardBoard({
         const tex = texRef.current
         if (!canvas || !tex) return
         const ctx = canvas.getContext('2d')!
-        drawBoard(ctx, entries, game)
+        drawBoard(ctx, entries, game, playerRow)
         tex.needsUpdate = true
-    }, [entries, game])
+    }, [entries, game, playerRow])
 
     // Poll for new scores every 60s (inside useFrame to avoid setInterval)
     useFrame(() => {
         const now = performance.now()
         if (now - lastFetch.current > LB_CONFIG.POLL_INTERVAL) {
             lastFetch.current = now
-            fetchLeaderboard(game).then(setEntries)
+            refresh()
         }
     })
 

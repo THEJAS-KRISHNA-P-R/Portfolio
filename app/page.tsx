@@ -24,6 +24,7 @@ export default function Home() {
   const isGameMode = usePortfolioStore((s) => s.isGameMode);
   const hasLoadedOnce = usePortfolioStore((s) => s.hasLoadedOnce);
   const setHasLoadedOnce = usePortfolioStore((s) => s.setHasLoadedOnce);
+  const setIsGameMode = usePortfolioStore((s) => s.setIsGameMode);
   const [showLoader, setShowLoader] = useState(false);
   const [worldReady, setWorldReady] = useState(false);
 
@@ -56,10 +57,16 @@ export default function Home() {
       {isGameMode ? (
         <div className="absolute inset-0 w-full h-full bg-bg overflow-hidden text-[#00e676]">
           {showLoader && !worldReady && !hasLoadedOnce && (
-            <GameLoadingScreen onComplete={() => {
-              setWorldReady(true);
-              setHasLoadedOnce(true);
-            }} />
+            <GameLoadingScreen
+              onComplete={() => {
+                setWorldReady(true);
+                setHasLoadedOnce(true);
+              }}
+              onViewPortfolio={() => {
+                setShowLoader(false);
+                setIsGameMode(false);
+              }}
+            />
           )}
           {/* Always mount the 3D world behind the loading screen so it can initialize */}
           <World />

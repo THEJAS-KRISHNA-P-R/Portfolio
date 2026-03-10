@@ -17,6 +17,7 @@ import { GameLoadingScreen } from "./GameLoadingScreen";
 import { Effects } from "./Effects";
 import { getGroundTexture } from "@/lib/groundTexture";
 import { LeaderboardBoard } from "./LeaderboardBoard";
+import { getDeviceId } from "@/lib/deviceFingerprint";
 
 
 const Bowling = React.lazy(() => import("./Bowling").then(mod => ({ default: mod.Bowling })));
@@ -566,16 +567,16 @@ function AdaptivePhysics({ children }: { children: React.ReactNode }) {
 }
 
 export function World() {
-    const setProfile = useQualityStore(s => s.setProfile)
+    const setDetectedProfile = useQualityStore(s => s.setDetectedProfile)
     const profile = useQualityStore(s => s.profile)
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
         getDeviceProfile().then(p => {
-            setProfile(p)
+            setDetectedProfile(p)
             setReady(true)
         })
-    }, [setProfile])
+    }, [setDetectedProfile])
 
     if (!ready || !profile) return <GameLoadingScreen progress={0} message="Detecting device..." />
 
@@ -591,6 +592,7 @@ function SceneReadyNotifier({ onReady }: { onReady: () => void }) {
 function GameWorld() {
     const [sceneReady, setSceneReady] = useState(false)
     const handleReady = useCallback(() => setSceneReady(true), [])
+    const myDeviceId = useMemo(() => getDeviceId(), [])
 
     return (
         <div className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }}>
@@ -629,11 +631,13 @@ function GameWorld() {
                                         game="maze"
                                         position={[-125, 1.6, 64]}
                                         rotation={[0, Math.PI / 6 + Math.PI, 0]}
+                                        deviceId={myDeviceId}
                                     />
                                     <LeaderboardBoard
                                         game="football"
                                         position={[36, 1.6, 45]}
                                         rotation={[0, -Math.PI / 2, 0]}
+                                        deviceId={myDeviceId}
                                     />
                                 </Suspense>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { InfoModal } from "@/components/ui/InfoModal"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared input object — Car.tsx reads this directly every frame.
@@ -288,105 +289,6 @@ function VirtualJoystick() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SETTINGS SHEET
-// ─────────────────────────────────────────────────────────────────────────────
-type ControlScheme = 'buttons' | 'joystick'
-
-function SettingsSheet({
-  visible, onClose, scheme, setScheme,
-}: {
-  visible: boolean; onClose: () => void
-  scheme: ControlScheme; setScheme: (s: ControlScheme) => void
-}) {
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 470,
-        display: visible ? 'flex' : 'none',
-        alignItems: 'flex-end',
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: visible ? 'blur(5px)' : 'none',
-        WebkitBackdropFilter: visible ? 'blur(5px)' : 'none',
-      }}
-      onPointerDown={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        onPointerDown={e => e.stopPropagation()}
-        style={{
-          width: '100%',
-          background: 'rgba(4,14,9,0.97)',
-          border: '1px solid rgba(0,230,118,0.18)',
-          borderRadius: '22px 22px 0 0',
-          padding: 'clamp(1rem,4vw,1.6rem)',
-          paddingBottom: 'max(1.4rem, env(safe-area-inset-bottom))',
-          fontFamily: "'JetBrains Mono', monospace",
-        }}
-      >
-        {/* Drag handle */}
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.14)', margin: '0 auto 1.1rem' }} />
-
-        <div style={{ fontSize: 'clamp(0.46rem,1.3vw,0.55rem)', color: 'rgba(0,230,118,0.5)', letterSpacing: '0.22em', marginBottom: '0.9rem' }}>
-          CONTROL SCHEME
-        </div>
-
-        {([
-          { id: 'buttons', emoji: '🎮', label: 'BUTTONS', desc: 'D-pad steer left · Gas/Brake right' },
-          { id: 'joystick', emoji: '🕹️', label: 'JOYSTICK', desc: 'Analog stick · Drift bottom-right' },
-        ] as const).map(opt => (
-          <button
-            key={opt.id}
-            onPointerDown={e => {
-              e.stopPropagation()
-              setScheme(opt.id)
-              try { localStorage.setItem('mobileControlScheme', opt.id) } catch { }
-            }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.8rem',
-              width: '100%', padding: '0.7rem 1rem',
-              marginBottom: '0.5rem', borderRadius: '13px',
-              border: scheme === opt.id
-                ? '1.5px solid rgba(0,230,118,0.55)'
-                : '1.5px solid rgba(255,255,255,0.07)',
-              background: scheme === opt.id
-                ? 'rgba(0,230,118,0.1)' : 'rgba(255,255,255,0.03)',
-              color: scheme === opt.id ? '#00e676' : 'rgba(255,255,255,0.5)',
-              fontFamily: 'inherit',
-              fontSize: 'clamp(0.58rem,1.7vw,0.68rem)',
-              fontWeight: 700, letterSpacing: '0.1em',
-              cursor: 'pointer', textAlign: 'left',
-            }}
-          >
-            <span style={{ fontSize: '1.4rem' }}>{opt.emoji}</span>
-            <span style={{ flex: 1 }}>
-              {opt.label}
-              <span style={{ display: 'block', fontSize: 'clamp(0.42rem,1.1vw,0.5rem)', fontWeight: 400, opacity: 0.45, marginTop: '2px' }}>
-                {opt.desc}
-              </span>
-            </span>
-            {scheme === opt.id && <span style={{ color: '#00e676' }}>✓</span>}
-          </button>
-        ))}
-
-        <button
-          onPointerDown={e => { e.stopPropagation(); onClose() }}
-          style={{
-            marginTop: '0.6rem', width: '100%', padding: '0.65rem',
-            borderRadius: '11px',
-            border: '1px solid rgba(255,255,255,0.08)',
-            background: 'rgba(255,255,255,0.04)',
-            color: 'rgba(255,255,255,0.38)',
-            fontFamily: 'inherit',
-            fontSize: 'clamp(0.5rem,1.3vw,0.58rem)',
-            letterSpacing: '0.12em', cursor: 'pointer',
-          }}
-        >
-          CLOSE
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TOP-RIGHT HUD ROW
@@ -398,9 +300,9 @@ function SettingsSheet({
 // Settings:   pill-shaped icon button, same row.
 // ─────────────────────────────────────────────────────────────────────────────
 function TopRightHUD({
-  onSettingsOpen,
+  onInfoOpen,
 }: {
-  onSettingsOpen: () => void
+  onInfoOpen: () => void
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -470,16 +372,21 @@ function TopRightHUD({
         gap: 'clamp(5px, 1.2vw, 8px)',
       }}
     >
-      {/* SETTINGS button — pill icon */}
+      {/* INFO button — replaces settings gear */}
       <button
-        onPointerDown={e => { e.preventDefault(); e.stopPropagation(); onSettingsOpen() }}
+        onPointerDown={e => { e.stopPropagation(); onInfoOpen() }}
+        onClick={e => { e.stopPropagation(); onInfoOpen() }}
         style={{
           ...btnBase,
-          fontSize: 'clamp(0.88rem, 2.5vw, 1rem)',
+          width: 'clamp(40px, 10vw, 44px)', // Increased size for better tap target
+          height: 'clamp(40px, 10vw, 44px)',
+          fontSize: 'clamp(0.9rem, 2.8vw, 1.15rem)',
+          fontWeight: 700,
+          fontFamily: "'JetBrains Mono', monospace",
         }}
-        aria-label="Settings"
+        aria-label="Information"
       >
-        ⚙
+        i
       </button>
 
       {/* FULLSCREEN button */}
@@ -526,10 +433,10 @@ function TopRightHUD({
 export function MobileControls() {
   const [isTouch, setIsTouch] = useState(false)
   const [frozen, setFrozen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [scheme, setScheme] = useState<ControlScheme>(() => {
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [scheme, setScheme] = useState<'buttons' | 'joystick'>(() => {
     if (typeof window === 'undefined') return 'buttons'
-    try { return (localStorage.getItem('mobileControlScheme') as ControlScheme) ?? 'buttons' }
+    try { return (localStorage.getItem('mobileControlScheme') as any) ?? 'buttons' }
     catch { return 'buttons' }
   })
   const pendingZone = usePortfolioStore(s => s.pendingZone)
@@ -586,7 +493,7 @@ export function MobileControls() {
     <>
       {/* ── Top-right HUD: Settings + Fullscreen ───────────────── */}
       <TopRightHUD
-        onSettingsOpen={() => setSettingsOpen(true)}
+        onInfoOpen={() => setInfoOpen(true)}
       />
 
       {/* TURBO SQUARE — hidden in joystick mode, visible in buttons mode only */}
@@ -742,12 +649,16 @@ export function MobileControls() {
         </div>
       )}
 
-      {/* ── Settings sheet ───────────────────────────────────────────────── */}
-      <SettingsSheet
-        visible={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        scheme={scheme}
-        setScheme={setScheme}
+      {/* ── Info Modal ───────────────────────────────────────────────── */}
+      <InfoModal
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        isMobile={true}
+        controlScheme={scheme}
+        onSchemeChange={(s) => {
+          setScheme(s)
+          try { localStorage.setItem('mobileControlScheme', s) } catch { }
+        }}
       />
     </>
   )

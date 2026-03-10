@@ -231,8 +231,7 @@ export function ZoneConfirmModal() {
                             {/* Shimmer sweep */}
                             <span style={{
                                 position: 'absolute',
-                                inset: 0,
-                                background: `linear-gradient(105deg, transparent 40%, ${meta.color}30 50%, transparent 60%)`,
+                                backgroundImage: `linear-gradient(105deg, transparent 40%, ${meta.color}30 50%, transparent 60%)`,
                                 backgroundSize: '200% 100%',
                                 animation: 'btnShimmer 2.4s linear infinite',
                                 borderRadius: 'inherit',

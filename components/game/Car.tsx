@@ -220,11 +220,23 @@ export function Car() {
         window.addEventListener('cheat:infinite-boost', onInfiniteBoost);
         window.addEventListener('cheat:max-speed', onMaxSpeed);
 
+        const onRespawn = () => {
+            const body = carRef.current;
+            if (!body) return;
+            body.setTranslation({ x: 0, y: 3, z: 0 }, true);
+            body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            currentSpeed.current = 0;
+            forwardDriveTime.current = 0;
+        };
+        window.addEventListener('car:respawn', onRespawn);
+
         return () => {
             window.removeEventListener('car:reset', onReset);
             window.removeEventListener('game:freeze-controls', onFreeze);
             window.removeEventListener('cheat:infinite-boost', onInfiniteBoost);
             window.removeEventListener('cheat:max-speed', onMaxSpeed);
+            window.removeEventListener('car:respawn', onRespawn);
         }
     }, []); // Empty dependency array means this runs once on mount
 
@@ -240,6 +252,11 @@ export function Car() {
         }
 
         const dt = Math.min(delta, 0.05);
+
+        // Expose FPS for InfoModal
+        if (typeof window !== 'undefined') {
+            (window as any).__fps = Math.round(1 / delta);
+        }
 
         if (controlsFrozen.current) {
             currentSpeed.current = 0;

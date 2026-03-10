@@ -24,54 +24,38 @@ export interface DeviceProfile {
 // Cache result — only run once
 let _profile: DeviceProfile | null = null
 
-export async function getDeviceProfile(): Promise<DeviceProfile> {
-  if (_profile) return _profile
-
-  const gpuTier = await getGPUTier()
-  const isMobile = gpuTier.isMobile
-    ?? /Android|iPhone|iPad/i.test(navigator.userAgent)
-    ?? (window.innerWidth <= 768 && 'ontouchstart' in window)
-
-  const tier = gpuTier.tier
-
-  // ── DPR rules ──────────────────────────────────────────────────────────
-  // Desktop/laptop: MINIMUM DPR = 1.0, max = devicePixelRatio (usually 1-2)
-  // Mobile:         DPR scales with tier (can go below 1 on very old phones)
-  const baseDPR = isMobile
-    ? (tier <= 1 ? 0.75 : tier === 2 ? 1.0 : Math.min(window.devicePixelRatio, 1.5))
-    : Math.min(window.devicePixelRatio, tier <= 1 ? 1.0 : tier === 2 ? 1.2 : 1.5)
-  //           ↑ desktop: never below 1.0 even on tier 1
-
-  if (!isMobile && tier <= 1) {
-    // Old laptop with bad GPU — reduce effects but KEEP resolution sharp
-    _profile = {
+export function generateProfile(tier: QualityTier, isMobile: boolean): DeviceProfile {
+  if (!isMobile && tier === 'low') {
+    return {
       tier: 'low',
       isMobile: false,
-      dpr: 1.0,            // ← FULL resolution on desktop always
+      dpr: 1.0,
       shadows: false,
       shadowMapSize: 512,
       maxFPS: 60,
-      lazyLoadZones: false,          // never lazy on desktop
-      postprocessing: false,          // kill post to save GPU for resolution
+      lazyLoadZones: false,
+      postprocessing: false,
       fog: false,
       starCount: 400,
       pinCount: 10,
       physicsHz: 60,
       useMatcaps: false,
       blobShadow: false,
-      maxLights: 20,             // Uncapped on desktop low (post-processing is killed instead)
+      maxLights: 20,
       physicsIter: 4,
     }
-  } else if (!isMobile && tier === 2) {
-    _profile = {
+  }
+
+  if (!isMobile && tier === 'mid') {
+    return {
       tier: 'mid',
       isMobile: false,
-      dpr: Math.min(window.devicePixelRatio, 1.2),  // up to 1.2
+      dpr: Math.min(window.devicePixelRatio, 1.2),
       shadows: true,
       shadowMapSize: 512,
       maxFPS: 60,
       lazyLoadZones: false,
-      postprocessing: true,           // bloom + SMAA only
+      postprocessing: true,
       fog: true,
       starCount: 600,
       pinCount: 10,
@@ -81,17 +65,18 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
       maxLights: 20,
       physicsIter: 4,
     }
-  } else if (!isMobile) {
-    // Desktop tier 3: full quality
-    _profile = {
+  }
+
+  if (!isMobile) { // high
+    return {
       tier: 'high',
       isMobile: false,
       dpr: Math.min(window.devicePixelRatio, 1.5),
       shadows: true,
       shadowMapSize: 1024,
       maxFPS: 60,
-      lazyLoadZones: false,        // NEVER lazy load on high — cheat codes need full world
-      postprocessing: true,         // full stack: SSAO + bloom + SMAA + vignette
+      lazyLoadZones: false,
+      postprocessing: true,
       fog: true,
       starCount: 2000,
       pinCount: 10,
@@ -101,12 +86,13 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
       maxLights: 20,
       physicsIter: 4,
     }
-  } else if (isMobile && tier <= 1) {
-    // Old phone
-    _profile = {
+  }
+
+  if (isMobile && tier === 'low') {
+    return {
       tier: 'low',
       isMobile: true,
-      dpr: Math.min(window.devicePixelRatio, 1.0),   // tighten DPR to 1.0
+      dpr: Math.min(window.devicePixelRatio, 1.0),
       shadows: false,
       shadowMapSize: 0,
       maxFPS: 30,
@@ -116,14 +102,15 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
       starCount: 0,
       pinCount: 6,
       physicsHz: 30,
-      useMatcaps: true,        // ← Enable matcaps
-      blobShadow: true,        // ← Fake shadow
-      maxLights: 0,            // ← No point lights
-      physicsIter: 2,          // ← Reduce solver iterations
+      useMatcaps: true,
+      blobShadow: true,
+      maxLights: 0,
+      physicsIter: 2,
     }
-  } else if (isMobile && tier === 2) {
-    // Mid phone
-    _profile = {
+  }
+
+  if (isMobile && tier === 'mid') {
+    return {
       tier: 'mid',
       isMobile: true,
       dpr: Math.min(window.devicePixelRatio, 1.5),
@@ -137,33 +124,45 @@ export async function getDeviceProfile(): Promise<DeviceProfile> {
       pinCount: 10,
       physicsHz: 45,
       useMatcaps: false,
-      blobShadow: true,        // Fake shadow still
-      maxLights: 4,            // Cap point lights
+      blobShadow: true,
+      maxLights: 4,
       physicsIter: 3,
-    }
-  } else {
-    // Good phone (Oppo K13 etc)
-    _profile = {
-      tier: 'high',
-      isMobile: true,
-      dpr: Math.min(window.devicePixelRatio, 1.5),   // VISUAL FIX: was 1.3 → 1.5
-      shadows: true,
-      shadowMapSize: 512,
-      maxFPS: 60,
-      lazyLoadZones: false,
-      postprocessing: true,
-      fog: true,
-      starCount: 1200,
-      pinCount: 10,
-      physicsHz: 60,
-      useMatcaps: false,
-      blobShadow: true,        // Even on high mobile, blob saves castShadow cost
-      maxLights: 8,
-      physicsIter: 4,
     }
   }
 
-  return _profile!
+  // Mobile High
+  return {
+    tier: 'high',
+    isMobile: true,
+    dpr: Math.min(window.devicePixelRatio, 1.5),
+    shadows: true,
+    shadowMapSize: 512,
+    maxFPS: 60,
+    lazyLoadZones: false,
+    postprocessing: true,
+    fog: true,
+    starCount: 1200,
+    pinCount: 10,
+    physicsHz: 60,
+    useMatcaps: false,
+    blobShadow: true,
+    maxLights: 8,
+    physicsIter: 4,
+  }
+}
+
+export async function getDeviceProfile(): Promise<DeviceProfile> {
+  if (_profile) return _profile
+
+  const gpuTier = await getGPUTier()
+  const isMobile = gpuTier.isMobile
+    ?? /Android|iPhone|iPad/i.test(navigator.userAgent)
+    ?? (window.innerWidth <= 768 && 'ontouchstart' in window)
+
+  const detectedTier: QualityTier = gpuTier.tier <= 1 ? 'low' : gpuTier.tier === 2 ? 'mid' : 'high'
+  _profile = generateProfile(detectedTier, isMobile)
+
+  return _profile
 }
 
 // Sync getter — use after async init, falls back to mid

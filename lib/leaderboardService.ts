@@ -32,7 +32,10 @@ export function hasStoredName(): boolean {
 // Read Sheet as CSV (public, no API key, no CORS issue)
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${LB_CONFIG.SHEET_ID}/export?format=csv&gid=${LB_CONFIG.SHEET_GID}`
 
-export async function fetchLeaderboard(game: GameType): Promise<LeaderboardEntry[]> {
+export async function fetchLeaderboard(
+    game: GameType,
+    limit: number = LB_CONFIG.TOP_N   // default 5, pass Infinity for full list
+): Promise<LeaderboardEntry[]> {
     try {
         const res = await fetch(CSV_URL, { cache: 'no-store' })
         if (!res.ok) return []
@@ -69,13 +72,13 @@ export async function fetchLeaderboard(game: GameType): Promise<LeaderboardEntry
 
         const deduped = Array.from(bestPerDevice.values())
 
-        // Sort and take top 5
+        // Sort by score or time
         deduped.sort((a, b) =>
             game === 'football'
                 ? b.score - a.score
                 : a.time - b.time
         )
-        return deduped.slice(0, LB_CONFIG.TOP_N)
+        return deduped.slice(0, limit)
     } catch {
         return []   // offline or error — return empty, never throw
     }
@@ -141,6 +144,10 @@ export function submitScore(
     data.append(f.game, game)
 
     fetch(LB_CONFIG.FORM_URL, { method: 'POST', body: data, mode: 'no-cors' })
+        .then(() => {
+            // Signal all boards to refresh instantly
+            window.dispatchEvent(new CustomEvent('leaderboard:updated', { detail: { game } }))
+        })
         .catch(() => { })
 }
 
@@ -153,22 +160,66 @@ export async function handleGameComplete(
     time: number,
     game: GameType
 ): Promise<void> {
-    const entries = await fetchLeaderboard(game)
+    const deviceId = getDeviceId()
+    const allEntries = await fetchLeaderboard(game, Infinity)
+
+    // 1. Check Personal Record
+    const existingEntry = allEntries.find(e => e.deviceId === deviceId)
+    if (existingEntry && !hasStoredName()) {
+        setStoredName(existingEntry.playerName)
+    }
+
     const checkValue = game === 'football' ? score : time
-    const result = checkRank(checkValue, game, entries)
+    const beats = (a: number, b: number) => game === 'football' ? a > b : a < b
 
-    if (result.rank === null) return   // didn't make top 5 — do nothing
+    // ONLY update if they beat their previous record (or it's their first time)
+    const isNewRecord = !existingEntry || beats(checkValue, game === 'football' ? existingEntry.score : existingEntry.time)
 
-    if (hasStoredName()) {
-        // Name already known — submit silently and fire notification
-        submitScore(getStoredName()!, score, time, game)
-        window.dispatchEvent(new CustomEvent('leaderboard:ranked', {
-            detail: { rank: result.rank, displacing: (result as any).displacing, game, score, time }
-        }))
+    if (!isNewRecord) {
+        // Just beating their current session score but not their all-time record
+        return
+    }
+
+    // 2. Find Rank Changes
+    const oldRank = existingEntry ? allEntries.findIndex(e => e.deviceId === deviceId) + 1 : Infinity
+
+    // Sort logic to find temporary new rank
+    const proxyEntries = [...allEntries.filter(e => e.deviceId !== deviceId), { deviceId, score, time } as LeaderboardEntry]
+    proxyEntries.sort((a, b) => game === 'football' ? b.score - a.score : a.time - b.time)
+    const newRank = proxyEntries.findIndex(e => e.deviceId === deviceId) + 1
+
+    // 3. Detect Overtake
+    let overtakenName: string | null = null
+    if (newRank < oldRank && oldRank !== Infinity) {
+        // They moved up. Who was at the new position before?
+        // Note: we look at original allEntries to see who was there
+        const displacedIdx = newRank - 1
+        if (allEntries[displacedIdx] && allEntries[displacedIdx].deviceId !== deviceId) {
+            overtakenName = allEntries[displacedIdx].playerName
+        }
+    }
+
+    // 4. Track Top 5 Entry (only once)
+    const TOP5_KEY = `tkpn_top5_${game}`
+    const alreadyTop5 = localStorage.getItem(TOP5_KEY) === 'true'
+    const isEnteringTop5 = newRank <= LB_CONFIG.TOP_N && !alreadyTop5
+    if (newRank <= LB_CONFIG.TOP_N) localStorage.setItem(TOP5_KEY, 'true')
+
+    const detail = {
+        rank: newRank,
+        oldRank: oldRank === Infinity ? null : oldRank,
+        overtaken: overtakenName,
+        isEnteringTop5,
+        isPersonalBest: !!existingEntry && isNewRecord,
+        isRecord: isNewRecord, // General flag for "should notification show at all"
+        game, score, time
+    }
+
+    if (hasStoredName() || existingEntry) {
+        const name = getStoredName() ?? existingEntry?.playerName ?? 'Anonymous'
+        submitScore(name, score, time, game)
+        window.dispatchEvent(new CustomEvent('leaderboard:ranked', { detail }))
     } else {
-        // Need to ask for name first — fire prompt event with context
-        window.dispatchEvent(new CustomEvent('leaderboard:needs-name', {
-            detail: { rank: result.rank, displacing: (result as any).displacing, game, score, time }
-        }))
+        window.dispatchEvent(new CustomEvent('leaderboard:needs-name', { detail }))
     }
 }

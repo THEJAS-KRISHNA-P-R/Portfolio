@@ -6,49 +6,73 @@ import { submitScore, setStoredName, getStoredName } from '@/lib/leaderboardServ
 import type { GameType } from '@/lib/leaderboard'
 import { formatMazeTime } from '@/lib/leaderboard'
 
-type RankType = 'record' | 'top5'
-
 interface ModalState {
     mode: 'name-prompt' | 'notification' | null
-    rank: RankType
-    displacing: string | null
+    rank: number
+    oldRank: number | null
+    overtaken: string | null
+    isEnteringTop5: boolean
+    isPersonalBest: boolean
+    isRecord: boolean
     game: GameType
     score: number
     time: number
 }
 
+const initialState: ModalState = {
+    mode: null,
+    rank: 0,
+    oldRank: null,
+    overtaken: null,
+    isEnteringTop5: false,
+    isPersonalBest: false,
+    isRecord: false,
+    game: 'football',
+    score: 0,
+    time: 0,
+}
+
 export default function LeaderboardNamePrompt() {
-    const [state, setState] = useState<ModalState>({
-        mode: null, rank: 'top5', displacing: null,
-        game: 'football', score: 0, time: 0,
-    })
+    const [state, setState] = useState<ModalState>(initialState)
     const [name, setName] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
-        // Device has no stored name — ask for it
         const onNeedsName = (e: Event) => {
             const d = (e as CustomEvent).detail
             setState({
                 mode: 'name-prompt',
-                rank: d.rank, displacing: d.displacing,
-                game: d.game, score: d.score, time: d.time,
+                rank: d.rank,
+                oldRank: d.oldRank,
+                overtaken: d.overtaken,
+                isEnteringTop5: d.isEnteringTop5,
+                isPersonalBest: d.isPersonalBest,
+                isRecord: d.isRecord,
+                game: d.game,
+                score: d.score,
+                time: d.time,
             })
             setName('')
             setSubmitting(false)
         }
 
-        // Device already has a name — just show the notification
         const onRanked = (e: Event) => {
             const d = (e as CustomEvent).detail
             setState({
                 mode: 'notification',
-                rank: d.rank, displacing: d.displacing,
-                game: d.game, score: d.score, time: d.time,
+                rank: d.rank,
+                oldRank: d.oldRank,
+                overtaken: d.overtaken,
+                isEnteringTop5: d.isEnteringTop5,
+                isPersonalBest: d.isPersonalBest,
+                isRecord: d.isRecord,
+                game: d.game,
+                score: d.score,
+                time: d.time,
             })
-            // Auto-dismiss after 4 seconds
-            setTimeout(() => setState(s => ({ ...s, mode: null })), 4000)
+            // Dismiss after 5 seconds
+            setTimeout(() => setState(s => ({ ...s, mode: null })), 5000)
         }
 
         window.addEventListener('leaderboard:needs-name', onNeedsName)
@@ -73,7 +97,7 @@ export default function LeaderboardNamePrompt() {
         submitScore(name.trim(), state.score, state.time, state.game)
         // Switch to notification mode
         setState(s => ({ ...s, mode: 'notification' }))
-        setTimeout(() => setState(s => ({ ...s, mode: null })), 4000)
+        setTimeout(() => setState(s => ({ ...s, mode: null })), 5000)
     }
 
     if (!state.mode) return null
@@ -84,9 +108,17 @@ export default function LeaderboardNamePrompt() {
 
     const playerName = getStoredName() ?? name
 
-    // ── NOTIFICATION BANNER (name already known) ──────────────────────
+    // ── 1. NOTIFICATION BANNER (name already known) ──────────────────
     if (state.mode === 'notification') {
-        const isRecord = state.rank === 'record'
+        const isHighRank = state.rank <= 3
+        const isPersonalBest = state.isPersonalBest
+        const isEnteringTop5 = state.isEnteringTop5
+
+        let title = 'NEW SCORE'
+        if (isPersonalBest) title = 'NEW RECORD'
+        else if (isEnteringTop5) title = 'TOP 5 ENTERED'
+        else if (state.overtaken) title = 'POSITION UP'
+
         return (
             <div style={{
                 position: 'fixed',
@@ -99,49 +131,49 @@ export default function LeaderboardNamePrompt() {
                 pointerEvents: 'none',
             }}>
                 <div style={{
-                    background: isRecord ? 'rgba(255,215,0,0.12)' : 'rgba(0,255,136,0.10)',
-                    border: `1px solid ${isRecord ? 'rgba(255,215,0,0.5)' : 'rgba(0,255,136,0.4)'}`,
+                    background: isHighRank ? 'rgba(255,215,0,0.12)' : 'rgba(0,255,136,0.10)',
+                    border: `1px solid ${isHighRank ? 'rgba(255,215,0,0.5)' : 'rgba(0,255,136,0.4)'}`,
                     borderRadius: '14px',
                     padding: '1.8rem 2.5rem',
                     backdropFilter: 'blur(8px)',
-                    boxShadow: `0 0 50px ${isRecord ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,136,0.12)'}`,
+                    boxShadow: `0 0 50px ${isHighRank ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,136,0.12)'}`,
                 }}>
-                    <div style={{
-                        fontSize: isRecord ? '2.2rem' : '1.6rem',
-                        marginBottom: '0.4rem',
-                    }}>
-                        {isRecord ? '🏆' : '🎯'}
+                    <div style={{ fontSize: isHighRank ? '2.2rem' : '1.6rem', marginBottom: '0.4rem' }}>
+                        {state.rank === 1 ? '🥇' : state.rank === 2 ? '🥈' : state.rank === 3 ? '🥉' : '🎯'}
                     </div>
                     <div style={{
-                        color: isRecord ? '#ffd700' : '#00ff88',
-                        fontSize: isRecord ? '1.1rem' : '0.9rem',
+                        color: isHighRank ? '#ffd700' : '#00ff88',
+                        fontSize: '0.9rem',
                         fontWeight: 700,
                         letterSpacing: '0.12em',
                         marginBottom: '0.3rem',
                     }}>
-                        {isRecord ? 'NEW RECORD' : 'TOP 5'}
+                        {title} {isEnteringTop5 && !isPersonalBest && '⭐'}
                     </div>
                     <div style={{ color: '#ffffff', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
                         {scoreDisplay}
                     </div>
-                    {state.displacing && (
-                        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem' }}>
-                            {isRecord
-                                ? `beating ${state.displacing}'s record`
-                                : `beating ${state.displacing}`
-                            }
-                        </div>
-                    )}
-                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem', marginTop: '0.5rem' }}>
-                        {playerName} · {state.game === 'football' ? 'FOOTBALL' : 'MAZE'} LEADERBOARD
+                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', fontWeight: 500 }}>
+                        {state.overtaken ? (
+                            <>Overtook <span style={{ color: '#00ff88' }}>{state.overtaken}</span>! Now at <span style={{ color: '#00bfff' }}>#{state.rank}</span></>
+                        ) : state.oldRank && state.oldRank !== state.rank ? (
+                            <>Beating your record of <span style={{ color: '#00bfff' }}>#{state.oldRank}</span>!</>
+                        ) : state.oldRank ? (
+                            <>Beating your personal best!</>
+                        ) : (
+                            <>You ranked <span style={{ color: '#00bfff' }}>#{state.rank}</span>!</>
+                        )}
+                    </div>
+                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem', marginTop: '0.8rem' }}>
+                        {playerName} · {state.game.toUpperCase()} LEADERBOARD
                     </div>
                 </div>
             </div>
         )
     }
 
-    // ── NAME PROMPT (first time ever on this device) ──────────────────
-    const isRecord = state.rank === 'record'
+    // ── 2. NAME PROMPT (first time ever on this device) ──────────────
+    const isHighRank = state.rank <= 3
     return (
         <div style={{
             position: 'fixed',
@@ -156,38 +188,32 @@ export default function LeaderboardNamePrompt() {
         }}>
             <div style={{
                 background: 'rgba(6, 15, 10, 0.97)',
-                border: `1px solid ${isRecord ? 'rgba(255,215,0,0.4)' : 'rgba(0,255,136,0.3)'}`,
+                border: `1px solid ${isHighRank ? 'rgba(255,215,0,0.4)' : 'rgba(0,255,136,0.3)'}`,
                 borderRadius: '14px',
                 padding: '2rem 2.5rem',
                 width: 'min(400px, 88vw)',
-                boxShadow: `0 0 50px ${isRecord ? 'rgba(255,215,0,0.1)' : 'rgba(0,255,136,0.1)'}`,
+                boxShadow: `0 0 50px ${isHighRank ? 'rgba(255,215,0,0.1)' : 'rgba(0,255,136,0.1)'}`,
                 textAlign: 'center',
             }}>
-                {/* Badge */}
                 <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>
-                    {isRecord ? '🏆' : '🎯'}
+                    {state.rank === 1 ? '🥇' : '🏆'}
                 </div>
                 <div style={{
-                    color: isRecord ? '#ffd700' : '#00ff88',
-                    fontSize: '0.75rem',
+                    color: isHighRank ? '#ffd700' : '#00ff88',
+                    fontSize: '0.8rem',
                     letterSpacing: '0.15em',
+                    fontWeight: 700,
                     marginBottom: '0.3rem',
                 }}>
-                    {isRecord ? 'NEW RECORD' : 'YOU MADE TOP 5'}
+                    {state.rank === 1 ? 'WORLD FIRST!' : 'LEADERBOARD ENTRY'}
                 </div>
                 <div style={{ color: '#ffffff', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.2rem' }}>
                     {scoreDisplay}
                 </div>
-                {state.displacing && (
-                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem', marginBottom: '1.4rem' }}>
-                        {isRecord
-                            ? `beating ${state.displacing}'s record`
-                            : `beating ${state.displacing}`
-                        }
-                    </div>
-                )}
+                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', marginBottom: '1.4rem' }}>
+                    Ranked <span style={{ color: '#00ff88' }}>#{state.rank}</span>
+                </div>
 
-                {/* Divider */}
                 <div style={{
                     borderTop: '1px solid rgba(255,255,255,0.08)',
                     marginBottom: '1.2rem',
@@ -198,7 +224,6 @@ export default function LeaderboardNamePrompt() {
                     Enter your name for the leaderboard
                 </div>
 
-                {/* Input */}
                 <input
                     ref={inputRef}
                     value={name}
@@ -222,10 +247,9 @@ export default function LeaderboardNamePrompt() {
                     }}
                 />
                 <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.62rem', marginBottom: '1.1rem' }}>
-                    {20 - name.length} chars left · saved to this device forever
+                    {20 - name.length} chars left · saved to this device
                 </div>
 
-                {/* Submit */}
                 <button
                     onClick={handleSubmitName}
                     disabled={!name.trim() || submitting}
@@ -233,14 +257,14 @@ export default function LeaderboardNamePrompt() {
                         width: '100%',
                         padding: '0.75rem',
                         background: name.trim()
-                            ? isRecord ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,136,0.15)'
+                            ? isHighRank ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,136,0.15)'
                             : 'transparent',
                         border: `1px solid ${name.trim()
-                            ? isRecord ? 'rgba(255,215,0,0.5)' : 'rgba(0,255,136,0.4)'
+                            ? isHighRank ? 'rgba(255,215,0,0.5)' : 'rgba(0,255,136,0.4)'
                             : 'rgba(255,255,255,0.1)'}`,
                         borderRadius: '8px',
                         color: name.trim()
-                            ? isRecord ? '#ffd700' : '#00ff88'
+                            ? isHighRank ? '#ffd700' : '#00ff88'
                             : 'rgba(255,255,255,0.2)',
                         fontFamily: "'JetBrains Mono', monospace",
                         fontSize: '0.85rem',
