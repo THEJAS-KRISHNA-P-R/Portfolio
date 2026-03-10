@@ -19,18 +19,18 @@ function BlobShadow({ visible }: { visible: boolean }) {
 // ── Rocket League Tuning ─────────────────────────────────────────────────────
 const TOP_SPEED = 18
 const ACCEL = 0.055
-const BOOST_ACCEL = 0.15
+const BOOST_ACCEL = 0.18
 const BRAKE = 0.065
 const COAST_DECEL = 0.012
 const REVERSE_SPEED = 7
-const BOOST_SPEED = 35
+const BOOST_SPEED = 36
 const BOOST_DURATION = 3.3
 const BOOST_COOLDOWN = 2.0 // seconds between boost charges
 const BOOST_DRIVE_TO_RECHARGE = 12.0 // drive time for full refill if we don't use cooldown logic
 
 const WHEELBASE = 3.2    // virtual wheelbase length — controls turn radius feel
 const MAX_STEER_ANGLE = 0.52   // was 0.55
-const STEER_SPEED = 9.0    // was 6.0
+const STEER_SPEED = 6.0    // was 6.0
 const STEER_RETURN = 12.0
 
 const ACCEL_RAMP_UP_TIME = 1.5 // Time to reach full acceleration

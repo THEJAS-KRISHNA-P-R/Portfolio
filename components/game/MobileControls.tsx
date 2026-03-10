@@ -374,7 +374,6 @@ function TopRightHUD({
     >
       {/* INFO button — replaces settings gear */}
       <button
-        onPointerDown={e => { e.stopPropagation(); onInfoOpen() }}
         onClick={e => { e.stopPropagation(); onInfoOpen() }}
         style={{
           ...btnBase,

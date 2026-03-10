@@ -436,6 +436,7 @@ function RendererTab({ rendererInfo }: {
     const handleTierChange = (t: QualityTier) => {
         if (!profile) return
         const newProfile = generateProfile(t, profile.isMobile)
+        useQualityStore.getState().setUserTier(t)
         setProfile(newProfile)
     }
 

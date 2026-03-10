@@ -11,7 +11,7 @@ import { ZONES_ARRAY } from "@/lib/constants";
 import { TriggerZone } from "./TriggerZone";
 import { SpinningText, Aurora } from "../ui";
 import { usePortfolioStore } from "@/store/usePortfolioStore";
-import { getDeviceProfile } from "@/lib/deviceTier";
+import { getDeviceProfile, generateProfile } from "@/lib/deviceTier";
 import { useQualityStore } from "@/store/useQualityStore";
 import { GameLoadingScreen } from "./GameLoadingScreen";
 import { Effects } from "./Effects";
@@ -550,7 +550,14 @@ export function World() {
 
     useEffect(() => {
         getDeviceProfile().then(p => {
-            setDetectedProfile(p)
+            const userTier = useQualityStore.getState().userTier
+            if (userTier) {
+                const manualProfile = generateProfile(userTier, p.isMobile)
+                setDetectedProfile(p) // keep detected for info
+                useQualityStore.getState().setProfile(manualProfile)
+            } else {
+                setDetectedProfile(p)
+            }
             setReady(true)
         })
     }, [setDetectedProfile])
