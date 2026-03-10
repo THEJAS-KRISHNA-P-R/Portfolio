@@ -8,6 +8,7 @@ import { useQualityStore } from "@/store/useQualityStore"
 
 export function Effects() {
   const profile = useQualityStore(s => s.profile)!
+  const caOffset = useMemo(() => new THREE.Vector2(0.0004, 0.0004), [])
 
   // ── LOW TIER: No post-processing ──────────────────────────────────
   if (profile.tier === 'low') return null
@@ -75,8 +76,6 @@ export function Effects() {
     }
 
     // ── DESKTOP high-tier: full cinematic stack ──────────────────────────
-    const caOffset = useMemo(() => new THREE.Vector2(0.0004, 0.0004), [])
-
     return (
       <Suspense fallback={null}>
         <EffectComposer multisampling={0} enableNormalPass>

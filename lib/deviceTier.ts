@@ -42,7 +42,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
       useMatcaps: false,
       blobShadow: false,
       maxLights: 20,
-      physicsIter: 4,
+      physicsIter: 10,
     }
   }
 
@@ -63,7 +63,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
       useMatcaps: false,
       blobShadow: false,
       maxLights: 20,
-      physicsIter: 4,
+      physicsIter: 10,
     }
   }
 
@@ -84,7 +84,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
       useMatcaps: false,
       blobShadow: false,
       maxLights: 20,
-      physicsIter: 4,
+      physicsIter: 10,
     }
   }
 
@@ -105,7 +105,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
       useMatcaps: true,
       blobShadow: true,
       maxLights: 0,
-      physicsIter: 2,
+      physicsIter: 6,
     }
   }
 
@@ -126,7 +126,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
       useMatcaps: false,
       blobShadow: true,
       maxLights: 4,
-      physicsIter: 3,
+      physicsIter: 8,
     }
   }
 
@@ -147,7 +147,7 @@ export function generateProfile(tier: QualityTier, isMobile: boolean): DevicePro
     useMatcaps: false,
     blobShadow: true,
     maxLights: 8,
-    physicsIter: 4,
+    physicsIter: 10,
   }
 }
 
@@ -172,6 +172,6 @@ export function getProfileSync(): DeviceProfile {
     shadows: true, shadowMapSize: 512, maxFPS: 60,
     lazyLoadZones: false, postprocessing: true, fog: true,
     starCount: 800, pinCount: 10, physicsHz: 60,
-    useMatcaps: false, blobShadow: false, maxLights: 12, physicsIter: 4,
+    useMatcaps: false, blobShadow: false, maxLights: 12, physicsIter: 8,
   }
 }

@@ -257,74 +257,96 @@ export function GameLoadingScreen({
                             width: '100%',
                             flexWrap: 'wrap',   // wraps to column on narrow screens
                         }}>
-                            <button onClick={handleLaunch} className="hud-portfolio-btn">
-                                <div className="btn-outer">
-                                    <div className="btn-inner">
-                                        <span>Enter World</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <button onClick={handleLaunch} className="hud-portfolio-btn">
+                                    <div className="btn-outer">
+                                        <div className="btn-inner">
+                                            <span>Enter World</span>
+                                        </div>
                                     </div>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={onViewPortfolio}
-                                style={{
-                                    padding: '0.75em 1.5em',
-                                    background: '#050a0a',
-                                    border: '1px solid rgba(0, 191, 255, 0.3)',
-                                    borderRadius: '100em',
-                                    color: 'rgba(0, 191, 255, 0.75)',
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '0.65rem',
-                                    letterSpacing: '0.1em',
+                                </button>
+                                <p style={{
+                                    fontSize: '0.48rem',
+                                    marginTop: '0.5rem',
+                                    visibility: 'hidden',
                                     textTransform: 'uppercase',
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap',
-                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    position: 'relative',
-                                    overflow: 'hidden',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    boxShadow: '0 0 15px rgba(0, 191, 255, 0.05)',
-                                }}
-                                onMouseEnter={e => {
-                                    const btn = e.currentTarget
-                                    btn.style.borderColor = 'rgba(0, 191, 255, 0.7)'
-                                    btn.style.color = '#ffffff'
-                                    btn.style.boxShadow = '0 0 25px rgba(0, 191, 255, 0.15), inset 0 0 10px rgba(0, 191, 255, 0.1)'
-                                    btn.style.transform = 'translateY(-1px)'
-                                }}
-                                onMouseLeave={e => {
-                                    const btn = e.currentTarget
-                                    btn.style.borderColor = 'rgba(0, 191, 255, 0.3)'
-                                    btn.style.color = 'rgba(0, 191, 255, 0.75)'
-                                    btn.style.boxShadow = '0 0 15px rgba(0, 191, 255, 0.05)'
-                                    btn.style.transform = 'translateY(0)'
-                                }}
-                            >
-                                <div style={{
-                                    position: 'absolute', inset: 0,
-                                    backgroundImage: 'linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.1), transparent)',
-                                    backgroundSize: '200% 100%',
-                                    animation: 'btnShimmer 3s infinite linear',
-                                    pointerEvents: 'none'
-                                }} />
-                                <span style={{ position: 'relative', zIndex: 1 }}>View Portfolio</span>
-                            </button>
+                                    letterSpacing: '0.12em',
+                                    marginBottom: 0
+                                }}>
+                                    spacer
+                                </p>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <button
+                                    onClick={onViewPortfolio}
+                                    style={{
+                                        padding: '0.75em 1.5em',
+                                        background: '#050a0a',
+                                        border: '1px solid rgba(0, 191, 255, 0.3)',
+                                        borderRadius: '100em',
+                                        color: 'rgba(0, 191, 255, 0.75)',
+                                        fontFamily: "'JetBrains Mono', monospace",
+                                        fontSize: '0.65rem',
+                                        letterSpacing: '0.1em',
+                                        textTransform: 'uppercase',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        position: 'relative',
+                                        overflow: 'hidden',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        boxShadow: '0 0 15px rgba(0, 191, 255, 0.05)',
+                                    }}
+                                    onMouseEnter={e => {
+                                        const btn = e.currentTarget
+                                        btn.style.borderColor = 'rgba(0, 191, 255, 0.7)'
+                                        btn.style.color = '#ffffff'
+                                        btn.style.boxShadow = '0 0 25px rgba(0, 191, 255, 0.15), inset 0 0 10px rgba(0, 191, 255, 0.1)'
+                                        btn.style.transform = 'translateY(-1px)'
+                                    }}
+                                    onMouseLeave={e => {
+                                        const btn = e.currentTarget
+                                        btn.style.borderColor = 'rgba(0, 191, 255, 0.3)'
+                                        btn.style.color = 'rgba(0, 191, 255, 0.75)'
+                                        btn.style.boxShadow = '0 0 15px rgba(0, 191, 255, 0.05)'
+                                        btn.style.transform = 'translateY(0)'
+                                    }}
+                                >
+                                    <div style={{
+                                        position: 'absolute', inset: 0,
+                                        backgroundImage: 'linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.1), transparent)',
+                                        backgroundSize: '200% 100%',
+                                        animation: 'btnShimmer 3s infinite linear',
+                                        pointerEvents: 'none'
+                                    }} />
+                                    <span style={{ position: 'relative', zIndex: 1 }}>View Portfolio</span>
+                                </button>
+                                <p style={{
+                                    fontSize: '0.48rem', color: 'rgba(0, 191, 255, 0.4)',
+                                    letterSpacing: '0.12em', textTransform: 'uppercase',
+                                    marginTop: '0.5rem', textAlign: 'center', width: '100%',
+                                    marginBottom: 0
+                                }}>
+                                    enter normal portfolio
+                                </p>
+                            </div>
                         </div>
 
                         <p style={{
                             fontSize: '0.55rem', color: 'rgba(255,255,255,0.18)',
                             letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0,
                         }}>
-                            Press Enter or tap to continue
+                            Press Enter or tap to continue to 3D world
                         </p>
                     </div>
                 )}
 
                 {/* ── View Portfolio button — visible during loading AND launching ── */}
                 {(phase === 'loading' || phase === 'launching') && (
-                    <div style={{ marginTop: '1.8rem', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ marginTop: '1.8rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <button
                             onClick={onViewPortfolio}
                             style={{
@@ -370,6 +392,13 @@ export function GameLoadingScreen({
                             }} />
                             <span style={{ position: 'relative', zIndex: 1 }}>View Portfolio →</span>
                         </button>
+                        <p style={{
+                            fontSize: '0.45rem', color: 'rgba(0, 191, 255, 0.35)',
+                            letterSpacing: '0.12em', textTransform: 'uppercase',
+                            marginTop: '0.6rem', textAlign: 'center', marginBottom: 0
+                        }}>
+                            enter normal portfolio
+                        </p>
                     </div>
                 )}
 

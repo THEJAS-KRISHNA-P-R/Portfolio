@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { RigidBody, CuboidCollider } from "@react-three/rapier"
-import { Instances, Instance } from "@react-three/drei"
+import { Instances, Instance, Html } from "@react-three/drei"
 import * as THREE from "three"
 import { useQualityStore } from "@/store/useQualityStore"
 import { MazeMode } from "./MazeModeModal"
@@ -39,12 +39,12 @@ const MAZE_ORIGIN_Z = 72
 const MAZE_CENTER_X = MAZE_ORIGIN_X + (MAZE_COLS * CELL_SIZE) / 2
 const MAZE_CENTER_Z = MAZE_ORIGIN_Z + (MAZE_ROWS * CELL_SIZE) / 2
 
-// Entry through gap in top wall (row 0 cols 1-2)
-const ENTRY_WORLD_X = MAZE_ORIGIN_X + 1.5 * CELL_SIZE
-const ENTRY_WORLD_Z = MAZE_ORIGIN_Z + 1.5 * CELL_SIZE
+// Entry through gap in top wall (row 0 cols 1-2) — centered in the 2-cell gap
+const ENTRY_WORLD_X = MAZE_ORIGIN_X + 2 * CELL_SIZE
+const ENTRY_WORLD_Z = MAZE_ORIGIN_Z + 1.5 * CELL_SIZE  // Nudged forward so car lands inside the first safe cell (row 1)
 
-// Exit through gap in bottom wall (row 12 cols 22-23)
-const EXIT_WORLD_X = MAZE_ORIGIN_X + 22.5 * CELL_SIZE
+// Exit through gap in bottom wall (row 12 cols 22-23) — centered in the 2-cell gap
+const EXIT_WORLD_X = MAZE_ORIGIN_X + 23 * CELL_SIZE
 const EXIT_WORLD_Z = MAZE_ORIGIN_Z + 12.5 * CELL_SIZE
 
 // ── Wall builders ──────────────────────────────────────────────────────
@@ -162,7 +162,12 @@ export const Maze = memo(function Maze() {
         window.dispatchEvent(new CustomEvent('game:clear', {
             detail: { game: 'maze', time: elapsed }
         }))
-        handleGameComplete(0, elapsed, 'maze')
+
+        // ── LEADERBOARD GATE ──
+        // Only submit to global leaderboard if playing in HARD (RESET) protocol
+        if (modeRef.current === 'hard') {
+            handleGameComplete(0, elapsed, 'maze')
+        }
 
         // 3. Freeze controls
         window.dispatchEvent(new CustomEvent('game:freeze-controls', { detail: { frozen: true } }))
@@ -274,24 +279,24 @@ export const Maze = memo(function Maze() {
                 <CuboidCollider args={[2, 0.05, 2]} />
             </RigidBody>
 
-            {/* EXIT SENSOR — only triggers handleExit if maze is active */}
+            {/* EXIT SENSOR — widened to 2-cell width (8 units) and nudged inward */}
             <RigidBody
                 type="fixed"
                 sensor
-                position={[EXIT_WORLD_X, 0.05, EXIT_WORLD_Z + CELL_HALF]}
+                position={[EXIT_WORLD_X, 0.05, EXIT_WORLD_Z + CELL_HALF - 3]}
                 onIntersectionEnter={handleExit}
             >
-                <CuboidCollider args={[2, 0.05, 2]} />
+                <CuboidCollider args={[4, 0.05, 2]} />
             </RigidBody>
 
-            {/* ENTRANCE BARRIER — ALWAYS blocks to prevent backtracking/unauthorized entry */}
-            <RigidBody type="fixed" position={[ENTRY_WORLD_X, WALL_HALF_H, MAZE_ORIGIN_Z + CELL_HALF]}>
-                <CuboidCollider args={[4, WALL_HALF_H, 0.2]} />
+            {/* ENTRANCE BARRIER — Z positioned at row 0.5 boundary (Z=2) to block the way BACK to row 0 */}
+            <RigidBody type="fixed" position={[ENTRY_WORLD_X, WALL_HALF_H, MAZE_ORIGIN_Z + CELL_SIZE]}>
+                <CuboidCollider args={[4, WALL_HALF_H, 0.1]} />
             </RigidBody>
 
-            {/* EXIT BARRIER — ALWAYS blocks entry from outside. */}
+            {/* EXIT BARRIER — ALWAYS solid to prevent entry from outside. */}
             <RigidBody type="fixed" position={[EXIT_WORLD_X, WALL_HALF_H, EXIT_WORLD_Z + CELL_HALF]}>
-                <CuboidCollider args={[CELL_SIZE / 2, WALL_HALF_H, 0.2]} sensor={mazeActive} />
+                <CuboidCollider args={[4, WALL_HALF_H, 0.1]} sensor={false} />
             </RigidBody>
 
             {/* ── Visual walls — per-cell Instances ─ */}
@@ -310,6 +315,8 @@ export const Maze = memo(function Maze() {
                     type="fixed"
                     position={seg.pos}
                     onCollisionEnter={handleCollision}
+                    restitution={0}
+                    friction={1}
                 >
                     <CuboidCollider args={seg.args} />
                 </RigidBody>
@@ -337,9 +344,46 @@ export const Maze = memo(function Maze() {
 
             {!mazeActive && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ENTRY_WORLD_X, 0.02, MAZE_ORIGIN_Z - 6]}>
-                    <planeGeometry args={[4, 4]} />
+                    <planeGeometry args={[8, 4]} />
                     <meshBasicMaterial color="#00bfff" transparent opacity={0.12} depthWrite={false} />
                 </mesh>
+            )}
+
+            {/* ── Labels ────────────────────────────────────────────── */}
+            <Html position={[ENTRY_WORLD_X, 6, MAZE_ORIGIN_Z - 6]} center distanceFactor={15}>
+                <div style={{
+                    color: '#00ff88',
+                    fontFamily: 'Orbitron, sans-serif',
+                    fontSize: '60px',
+                    fontWeight: 900,
+                    textShadow: '0 0 20px #00ff88',
+                    whiteSpace: 'nowrap',
+                    textTransform: 'uppercase',
+                    userSelect: 'none',
+                    pointerEvents: 'none'
+                }}>
+                    ENTRANCE
+                </div>
+            </Html>
+
+            {!mazeActive && (
+                <Html position={[EXIT_WORLD_X, 6, EXIT_WORLD_Z + CELL_HALF + 4]} center distanceFactor={15}>
+                    <div style={{
+                        color: '#ff4444',
+                        fontFamily: 'Orbitron, sans-serif',
+                        fontSize: '60px',
+                        fontWeight: 900,
+                        textShadow: '0 0 20px #ff4444',
+                        whiteSpace: 'nowrap',
+                        textTransform: 'uppercase',
+                        userSelect: 'none',
+                        pointerEvents: 'none',
+                        textAlign: 'center'
+                    }}>
+                        EXIT<br />
+                        <span style={{ fontSize: '24px' }}>DO NOT ENTER</span>
+                    </div>
+                </Html>
             )}
         </>
     )

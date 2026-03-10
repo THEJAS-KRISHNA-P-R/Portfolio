@@ -12,22 +12,17 @@ import { DriftSmoke } from "./DriftSmoke";
 import { useQualityStore } from "@/store/useQualityStore";
 
 function BlobShadow({ visible }: { visible: boolean }) {
-    if (!visible) return null;
-    return (
-        <mesh position={[0, -0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[1.4, 8]} />
-            <meshBasicMaterial color="black" transparent opacity={0.3} depthWrite={false} />
-        </mesh>
-    );
+    // Global removal: ALWAYS return null regardless of setting
+    return null;
 }
 
 // ── Rocket League Tuning ─────────────────────────────────────────────────────
 const TOP_SPEED = 18
 const ACCEL = 0.055
 const BOOST_ACCEL = 0.15
-const BRAKE = 0.045
+const BRAKE = 0.065
 const COAST_DECEL = 0.012
-const REVERSE_SPEED = 10
+const REVERSE_SPEED = 7
 const BOOST_SPEED = 35
 const BOOST_DURATION = 3.3
 const BOOST_COOLDOWN = 2.0 // seconds between boost charges
@@ -581,7 +576,7 @@ export function Car() {
                 angularDamping={1.5}
                 enabledRotations={[false, true, false]}
                 friction={1.2}
-                restitution={0.1}
+                restitution={0}
                 position={[0, 2, -5]}
             >
                 {/* Main body collider - raised slightly to clear ramp bottoms */}
@@ -590,9 +585,9 @@ export function Car() {
                 <CuboidCollider args={[0.58, 0.10, 1.17]} position={[0, -0.01, 0]} />
                 <TurboFlames visible={showFlames} />
                 <DriftSmoke />
-                {/* Rule: blobShadow on -> real castShadow off */}
-                <CarBody castShadow={!profile.blobShadow} />
-                <BlobShadow visible={profile.blobShadow} />
+                {/* Global shadow removal: castShadow is now ALWAYS false */}
+                <CarBody castShadow={false} />
+                <BlobShadow visible={false} />
             </RigidBody>
             {trailPositions.current.map((pos, i) => (
                 <mesh key={i} position={pos}>

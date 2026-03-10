@@ -366,77 +366,54 @@ function GameCanvas({ children }: { children: React.ReactNode }) {
     const profile = useQualityStore(s => s.profile)!
     const [dpr, setDpr] = useState(profile.dpr)
 
-    // ── MOBILE: exactly as it was before, with touchAction fix ─────────────
-    if (profile.isMobile) {
-        return (
-            <div style={{ position: 'absolute', inset: 0 }}>
-                <div style={{ width: '100%', height: '100%' }}>
-                    <Canvas
-                        style={{ touchAction: 'none' }}   // Moved from div to Canvas
-                        dpr={dpr}
-                        shadows={profile.shadows}
-                        gl={{
-                            antialias: false,
-                            powerPreference: 'high-performance',
-                            stencil: false,
-                            alpha: false,
-                        }}
-                        onCreated={({ gl }) => {
-                            gl.shadowMap.enabled = profile.shadows
-                            gl.shadowMap.type = THREE.PCFSoftShadowMap
-                        }}
-                        camera={{ fov: 58, near: 0.3, far: 200 }}
-                        performance={{ min: 0.4 }}
-                    >
-                        <AdaptiveEvents />
-                        <PerformanceMonitor
-                            bounds={() => profile.tier === 'low' ? [20, 30] : [40, 60]}
-                            onDecline={() => setDpr(d => Math.max(0.5, d - 0.1))}
-                            onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
-                            onFallback={() => setDpr(0.5)}
-                        />
-                        <FrameloopManager />
-                        {children}
-                    </Canvas>
-                </div>
-            </div>
-        )
-    }
+    // Sync state if profile changes (e.g. user changes settings)
+    useEffect(() => {
+        setDpr(profile.dpr)
+    }, [profile.dpr])
 
-    // ── DESKTOP: upgraded renderer ────────────────────────────────────────
     return (
         <div style={{ position: 'absolute', inset: 0 }}>
             <div style={{ width: '100%', height: '100%' }}>
                 <Canvas
-                    style={{ touchAction: 'none' }}       // Moved from div to Canvas
+                    style={{ touchAction: 'none' }}
                     dpr={dpr}
-                    shadows="soft"
+                    shadows={profile.isMobile ? (profile.shadows ? 'basic' : false) : 'soft'}
                     gl={{
                         antialias: false,
                         powerPreference: 'high-performance',
                         stencil: false,
                         alpha: false,
-                        toneMapping: THREE.ACESFilmicToneMapping,
-                        toneMappingExposure: 1.15,
-                        outputColorSpace: THREE.SRGBColorSpace,
-                        logarithmicDepthBuffer: false,
+                        ...(profile.isMobile ? {} : {
+                            toneMapping: THREE.ACESFilmicToneMapping,
+                            toneMappingExposure: 1.15,
+                            outputColorSpace: THREE.SRGBColorSpace,
+                            logarithmicDepthBuffer: false,
+                        })
                     }}
                     onCreated={({ gl }) => {
-                        gl.shadowMap.enabled = true
+                        gl.shadowMap.enabled = profile.isMobile ? profile.shadows : true
                         gl.shadowMap.type = THREE.PCFSoftShadowMap
-                        gl.shadowMap.autoUpdate = true
-                        gl.capabilities.getMaxAnisotropy()
+                        if (!profile.isMobile) {
+                            gl.shadowMap.autoUpdate = true
+                            gl.capabilities.getMaxAnisotropy()
+                        }
                     }}
-                    camera={{ fov: 55, near: 0.3, far: 400 }}
-                    performance={{ min: 0.5 }}
+                    camera={profile.isMobile
+                        ? { fov: 58, near: 0.3, far: 200 }
+                        : { fov: 55, near: 0.3, far: 400 }
+                    }
+                    performance={{ min: profile.isMobile ? 0.4 : 0.5 }}
                 >
                     <AdaptiveEvents />
                     <PerformanceMonitor
-                        bounds={() => [48, 62]}
-                        onDecline={() => setDpr(d => Math.max(1.0, d - 0.1))}
-                        onIncline={() => setDpr(d => Math.min(Math.min(window.devicePixelRatio, 2.0), d + 0.1))}
-                        onFallback={() => setDpr(1.0)}
-                        flipflops={4}
+                        bounds={profile.isMobile
+                            ? () => profile.tier === 'low' ? [20, 30] : [40, 60]
+                            : () => [48, 62]
+                        }
+                        onDecline={() => setDpr(d => Math.max(profile.isMobile ? 0.5 : 1.0, d - 0.1))}
+                        onIncline={() => setDpr(d => Math.min(profile.dpr, d + 0.1))}
+                        onFallback={() => setDpr(profile.isMobile ? 0.5 : 1.0)}
+                        flipflops={profile.isMobile ? undefined : 4}
                     />
                     <FrameloopManager />
                     {children}
@@ -668,9 +645,9 @@ const BowlingZones = () => {
     // PC: always render everything — no lazy loading
     const shouldRender = (wx: number, wz: number): boolean => {
         if (!profile.isMobile) return true
-        if (profile.tier === 'low') return dist(wx, wz) < 100
-        if (profile.tier === 'mid') return dist(wx, wz) < 120
-        return dist(wx, wz) < 160
+        if (profile.tier === 'low') return dist(wx, wz) < 140
+        if (profile.tier === 'mid') return dist(wx, wz) < 180
+        return dist(wx, wz) < 260
     }
 
     return shouldRender(-45, -45) ? (
@@ -688,9 +665,9 @@ const MazeZone = () => {
     // PC: always render everything — no lazy loading
     const shouldRender = (wx: number, wz: number): boolean => {
         if (!profile.isMobile) return true
-        if (profile.tier === 'low') return dist(wx, wz) < 100
-        if (profile.tier === 'mid') return dist(wx, wz) < 120
-        return dist(wx, wz) < 160
+        if (profile.tier === 'low') return dist(wx, wz) < 140
+        if (profile.tier === 'mid') return dist(wx, wz) < 180
+        return dist(wx, wz) < 260
     }
 
     return shouldRender(-90, 98) ? (
